@@ -224,6 +224,8 @@ const routeTree = rootRoute.addChildren([
 
 export const router = createRouter({
   routeTree,
+  // "/" locally, "/super_app/" on GitHub Pages (vite.config.ts `base`).
+  basepath: import.meta.env.BASE_URL,
   defaultPreload: 'intent',
   scrollRestoration: true,
   defaultPendingComponent: () => (

@@ -29,6 +29,7 @@ Mobile-first installable PWA with a Supabase backend. Modules live under `src/mo
 - **Keyboard**: the on-screen keyboard resizes the layout (`interactive-widget=resizes-content` in `index.html`), so bottom sheets sit on it with their `SheetFooter` pinned. `src/lib/keyboard.ts` handles, globally, Enter → next field (submit from the last), the `enterKeyHint` label and scrolling the focused field into view — don't add per-form focus code; a search box that owns Enter must `preventDefault`. Floating or bottom-fixed UI gets `keyboard-open:hidden`. Give text inputs the right keyboard: `type="number" inputMode="decimal"` for amounts, `type="search"` for filters, `autoCapitalize="words"` for names (`Input` already defaults search/email/password to no autocorrect).
 - **Theme**: tokens in `src/index.css`; dark mode is the `.dark` class on `<html>`. Keep `color-scheme` pinned per theme.
 - Path alias `@/` → `src/`.
+- **Base path**: production is served from GitHub Pages under `/super_app/` (`BASE_PATH` → Vite `base` → router `basepath`; `.github/workflows/deploy-pages.yml`). Never hard-code root-absolute URLs (`/icons/…`, `window.location = '/…'`); navigate through the router and build asset URLs from `import.meta.env.BASE_URL`.
 
 ## Expense Tracker is a mock (shared ledger)
 

@@ -105,3 +105,11 @@ npx supabase functions deploy admin-users
 ```
 
 Create the first admin on the hosted project from the Supabase dashboard (Auth → Users → Add user) and set `app_metadata.role = "admin"`, or run the seed's `auth.admin.createUser` equivalent once. The dev seed is never pushed.
+
+## Hosting on GitHub Pages
+
+`.github/workflows/deploy-pages.yml` builds and publishes the app to https://avinashsaripilli24.github.io/super_app/ on every push to `main` (or run it by hand from the Actions tab). The build sets `BASE_PATH=/super_app/`, which becomes Vite's `base`, the router's `basepath` and the PWA scope, and copies `index.html` to `404.html` so deep links survive a reload. One-time setup in the repo's **Settings**:
+
+1. **Pages** → Build and deployment → Source: **GitHub Actions**.
+2. **Secrets and variables → Actions → Variables**: add `VITE_SUPABASE_URL` (`https://<ref>.supabase.co`) and `VITE_SUPABASE_ANON_KEY` from the hosted project (Project Settings → API). The workflow refuses to build without them.
+3. In the hosted Supabase project, **Authentication → URL Configuration**: set the Site URL to `https://avinashsaripilli24.github.io/super_app/`.

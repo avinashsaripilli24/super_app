@@ -19,8 +19,14 @@ const supabaseProxy = Object.fromEntries(
   ]),
 )
 
+// Path the app is served under. "/" locally; the GitHub Pages workflow sets
+// BASE_PATH=/<repo>/ because a project site lives at <user>.github.io/<repo>/.
+// The router reads it back as import.meta.env.BASE_URL.
+const base = process.env.BASE_PATH ?? '/'
+
 // https://vite.dev/config/
 export default defineConfig({
+  base,
   define: {
     __APP_VERSION__: JSON.stringify(pkg.version),
   },
@@ -38,8 +44,8 @@ export default defineConfig({
         background_color: '#ffffff',
         display: 'standalone',
         orientation: 'portrait',
-        start_url: '/',
-        scope: '/',
+        start_url: base,
+        scope: base,
         icons: [
           { src: 'icons/pwa-192.png', sizes: '192x192', type: 'image/png' },
           { src: 'icons/pwa-512.png', sizes: '512x512', type: 'image/png' },
