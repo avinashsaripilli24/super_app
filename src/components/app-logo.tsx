@@ -1,0 +1,78 @@
+import { useId } from 'react'
+
+/**
+ * Super App's brand mark: the AR monogram (Avinash & Reema) with its rising
+ * arrow and chart bars, traced from the supplied artwork.
+ *
+ * Drawn on a 64-wide grid, 46.52 tall — the mark is wider than it is tall, so
+ * size it by height (`className="h-8 w-auto"`), never with a square `size-*`.
+ * Three layers paint in order: the full silhouette, the darker bevel faces,
+ * then the light ribbon and bars — so no seam between them can show through.
+ *
+ * `public/favicon.svg` carries the same three paths and is what
+ * `scripts/generate-icons.ps1` rasterises into the PNG icons. Change the
+ * artwork and all of them have to be regenerated together.
+ */
+
+/** The whole mark, counters included (evenodd). */
+const SILHOUETTE =
+  'M27.38 0L47.51 -0.04L50.02 0.31L52.8 1.12L55.93 2.64L58.26 4.35L60.82 7.17L62.61 10.31L63.51 13.18L6' +
+  '3.69 17.93L63.15 20.35L61.98 22.95L60.91 24.56L58.71 26.94L56.2 28.82L53.02 30.39L63.51 45.36L63.96 ' +
+  '46.07L63.82 46.48L52.35 46.48L39.75 24.92L39.8 24.69L40.43 24.61L48.04 24.34L50.11 23.53L52.12 21.96' +
+  'L53.47 20.08L54.27 17.57L54.1 13.89L52.75 11.2L51.63 9.99L50.2 9.01L47.78 8.2L31.73 8.11L27.38 0.81L' +
+  '27.2 0.45L27.38 0ZM20.12 0L22.05 0.13L23.62 1.52L33.39 20.17L29.4 22.81L25.46 24.78L20.89 15.91L13.8' +
+  '5 30.12L4.66 34.38L0.09 37.15L-0.04 36.84L4.17 28.32L17.97 1.7L19.27 0.31L20.12 0ZM48 11.92L48.36 12' +
+  '.1L48.36 12.55L44.95 20.53L44.19 21.83L42.4 20.21L36.03 24.78L31.46 27.47L14.7 35.9L10.22 38.59L7.31' +
+  ' 41.14L6.32 42.94L6.32 44.64L7.39 46.16L7.26 46.48L5.56 46.3L2.96 45.49L1.52 44.68L0.31 43.38L-0.04 ' +
+  '41.59L0.49 40.16L2.51 37.96L4.93 36.26L9.59 33.75L23.66 27.2L33.08 21.83L36.3 19.68L39.66 16.94L38.0' +
+  '5 15.33L38.27 14.92L48 11.92ZM36.53 26.53L37.06 26.8L40.29 32.72L47.19 45.62L47.46 46.16L47.33 46.48' +
+  'L36.12 46.48L35.81 46.07L31.6 37.56L31.6 29.31L36.53 26.53ZM24.78 32.63L29.54 32.72L29.54 46.07L29.2' +
+  '2 46.3L25.37 46.3L24.69 45.98L24.78 32.63ZM18.51 36.84L22.99 36.93L22.99 46.07L22.77 46.3L18.73 46.3' +
+  'L18.33 46.07L18.33 37.02L18.51 36.84ZM12.06 40.69L16.72 40.78L16.72 46.07L16.49 46.3L12.19 46.3L11.9' +
+  '7 46.07L12.06 40.69Z'
+
+/** The darkest faces of the reference — reads as a bevel on the R and the A. */
+const BEVEL =
+  'M36.44 26.89L36.8 26.98L38.5 29.94L46.57 44.91L47.1 45.98L46.97 46.21L36.08 46.07L31.87 37.56L31.87 ' +
+  '29.49L36.44 26.89ZM52.21 34.51L53.33 35.27L53.78 35.18L54.32 34.64L55.89 34.87L55.53 35.94L56.11 36.' +
+  '35L56.74 36.26L57.32 36.84L63.33 45.54L63.37 46.21L53.78 46.3L52.53 46.21L52.21 45.89L47.01 36.84L47' +
+  '.24 36.17L47.87 36.17L49.12 35.09L50.38 35.18L51.18 34.73L52.26 35.09L52.21 34.51Z'
+
+/** The ribbon arrow and the three chart bars. */
+const ACCENT =
+  'M48 11.92L48.36 12.1L48.36 12.55L44.95 20.53L44.19 21.83L42.4 20.21L36.03 24.78L31.46 27.47L14.7 35.' +
+  '9L10.22 38.59L7.31 41.14L6.32 42.94L6.32 44.64L7.39 46.16L7.26 46.48L6.5 46.43L6.54 46.21L6.9 46.3L7' +
+  '.04 46.07L6.41 45.27L6.05 44.19L6.41 42.22L7.22 40.96L8.52 39.66L10.71 38.01L10.08 37.74L9.9 36.84L8' +
+  '.87 35.18L7.35 35.27L5.74 36.08L3.32 37.6L1.12 39.62L0.22 41.32L0.22 42.67L0.85 43.83L2.02 44.82L1.8' +
+  '8 44.95L0.31 43.38L-0.04 41.59L0.49 40.16L2.51 37.96L4.93 36.26L9.59 33.75L23.66 27.2L33.08 21.83L36' +
+  '.3 19.68L39.57 17.03L38.05 15.33L38.27 14.92L48 11.92ZM24.78 32.63L29.54 32.72L29.54 46.07L29.22 46.' +
+  '3L25.37 46.3L24.69 45.98L24.78 32.63ZM18.51 36.84L22.99 36.93L22.99 46.07L22.77 46.3L18.73 46.3L18.3' +
+  '3 46.07L18.33 37.02L18.51 36.84ZM12.06 40.69L16.72 40.78L16.72 46.07L16.49 46.3L12.19 46.3L11.97 46.' +
+  '07L12.06 40.69Z'
+
+export function AppLogo({ className }: { className?: string }) {
+  const id = useId()
+
+  return (
+    <svg viewBox="0 0 64 46.52" fill="none" aria-hidden="true" className={className}>
+      <defs>
+        <linearGradient id={`${id}-base`} x1="0.05" y1="1" x2="0.95" y2="0">
+          <stop offset="0" stopColor="var(--logo-base-from)" />
+          <stop offset="0.55" stopColor="var(--logo-base-mid)" />
+          <stop offset="1" stopColor="var(--logo-base-to)" />
+        </linearGradient>
+        <linearGradient id={`${id}-shade`} x1="0" y1="1" x2="1" y2="0">
+          <stop offset="0" stopColor="var(--logo-shade-from)" />
+          <stop offset="1" stopColor="var(--logo-shade-to)" />
+        </linearGradient>
+        <linearGradient id={`${id}-accent`} x1="0" y1="1" x2="1" y2="0">
+          <stop offset="0" stopColor="var(--logo-accent-from)" />
+          <stop offset="1" stopColor="var(--logo-accent-to)" />
+        </linearGradient>
+      </defs>
+      <path d={SILHOUETTE} fill={`url(#${id}-base)`} fillRule="evenodd" />
+      <path d={BEVEL} fill={`url(#${id}-shade)`} fillRule="evenodd" />
+      <path d={ACCENT} fill={`url(#${id}-accent)`} fillRule="evenodd" />
+    </svg>
+  )
+}
