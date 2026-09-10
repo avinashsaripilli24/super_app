@@ -11,6 +11,7 @@ const noAutoText = { autoCapitalize: 'none', autoCorrect: 'off', spellCheck: fal
 const TYPE_DEFAULTS: Record<string, Partial<InputProps>> = {
   search: noAutoText,
   email: { inputMode: 'email', ...noAutoText },
+  tel: { inputMode: 'tel', ...noAutoText },
   password: noAutoText,
 }
 

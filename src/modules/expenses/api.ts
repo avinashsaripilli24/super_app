@@ -6,6 +6,7 @@
 import { endOfMonth, endOfYear, format, startOfMonth, startOfYear } from 'date-fns'
 
 import type { Enums, Tables } from '@/lib/database.types'
+import { formatPhone } from '@/lib/phone'
 import { inList, likePattern } from '@/lib/postgrest'
 import { supabase } from '@/lib/supabase'
 import type { Profile } from '@/store/auth-store'
@@ -74,11 +75,11 @@ export function canEdit(row: { user_id: string | null }, profile: Profile | null
 // Users -----------------------------------------------------------------------
 
 export async function listUserNames(): Promise<UserNames> {
-  const { data, error } = await supabase.from('user_names').select('id, full_name, email')
+  const { data, error } = await supabase.from('user_names').select('id, full_name, phone')
   if (error) fail(error)
   const map: UserNames = new Map()
   for (const u of data ?? []) {
-    if (u.id) map.set(u.id, u.full_name || u.email || 'Unknown')
+    if (u.id) map.set(u.id, u.full_name || formatPhone(u.phone) || 'Unknown')
   }
   return map
 }

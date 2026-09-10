@@ -218,7 +218,7 @@ export function isBiometricCancel(err: unknown) {
   return err instanceof DOMException && (err.name === 'NotAllowedError' || err.name === 'AbortError')
 }
 
-export async function enrollBiometric(user: { id: string; email?: string | null; name?: string | null }) {
+export async function enrollBiometric(user: { id: string; phone?: string | null; name?: string | null }) {
   const record = readLock(user.id)
   if (!record) throw new Error('Set a PIN first.')
   const cred = (await withPrompt(() =>
@@ -228,8 +228,8 @@ export async function enrollBiometric(user: { id: string; email?: string | null;
         rp: { name: 'Super App' },
         user: {
           id: new TextEncoder().encode(user.id),
-          name: user.email || user.id,
-          displayName: user.name || user.email || 'Super App',
+          name: user.phone || user.id,
+          displayName: user.name || user.phone || 'Super App',
         },
         pubKeyCredParams: [
           { type: 'public-key', alg: -7 },

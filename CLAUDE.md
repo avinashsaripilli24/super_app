@@ -13,9 +13,10 @@ Mobile-first installable PWA with a Supabase backend. Modules live under `src/mo
 
 - Supabase is the only backend. Talk to it through the singleton in [src/lib/supabase.ts](src/lib/supabase.ts).
 - Every table has RLS enabled. Use `(select auth.uid())` in policies and `public.is_admin()` for admin checks. Never select from `profiles` inside a `profiles` policy (infinite recursion).
-- Privileged actions (creating users, changing roles, banning) go through the `admin-users` edge function with the service role. The frontend never holds the service key.
-- Migrations are schema only. Dev data (including the default admin) lives in `supabase/seed.sql`.
-- Keep `profiles.role` as the source of truth; `app_metadata.role` is written on create for forward compatibility only.
+- Privileged actions (creating users, changing roles or login numbers, banning) go through the `admin-users` edge function with the service role. The frontend never holds the service key.
+- Migrations are schema only. `supabase/seed.sql` holds **only the default admin** (placeholder 9999999999 / Admin@1234). It is pushed to hosted with `db push --include-seed`, so never add mock data or real personal details to it: the repo is public.
+- Keep `profiles.role` as the source of truth; `app_metadata.role` is written on create for forward compatibility only. GoTrue applies `app_metadata` *after* the insert trigger runs, so the edge function writes `role` / `phone` onto the profile itself.
+- **Login is mobile number + password, no SMS.** `profiles.phone` (E.164 `+91…`) is the identity shown in the UI. Auth runs on an internal email derived from it (`phoneToAuthEmail` in `src/lib/phone.ts`, mirrored in the edge function; keep them in sync). A number changes only through the `set_phone` action, which moves the auth email, `app_metadata.phone` and `profiles.phone` together. Never show `profiles.email` / `session.user.email`; use `formatPhone`.
 
 ## Frontend rules
 
@@ -33,7 +34,7 @@ Mobile-first installable PWA with a Supabase backend. Modules live under `src/mo
 
 ## Expense Tracker is a mock (shared ledger)
 
-The data model in `supabase/migrations/*_expense_tracker.sql` + `*_shared_ledger.sql` and `src/modules/expenses/` is a placeholder **shared ledger**: every signed-in user reads every transaction/category/budget; inserts are own-only; updates/deletes are creator-or-admin (RLS). `user_id` is the creator and is shown as "Added by". Income rows also carry `earned_by` (the household member who earned it, shown as "Earned by"; a trigger defaults it to the creator and nulls it for expenses). The list's single Person filter matches `user_id` or `earned_by`. The only cross-user profile surface is the `public.user_names` view (id, full_name, email); never widen `profiles` RLS for this. Mirror the permission rule in the UI with `canEdit()` from `src/modules/expenses/api.ts`.
+The data model in `supabase/migrations/*_expense_tracker.sql` + `*_shared_ledger.sql` and `src/modules/expenses/` is a placeholder **shared ledger**: every signed-in user reads every transaction/category/budget; inserts are own-only; updates/deletes are creator-or-admin (RLS). `user_id` is the creator and is shown as "Added by". Income rows also carry `earned_by` (the household member who earned it, shown as "Earned by"; a trigger defaults it to the creator and nulls it for expenses). The list's single Person filter matches `user_id` or `earned_by`. The only cross-user profile surface is the `public.user_names` view (id, full_name, email, phone); never widen `profiles` RLS for this. Mirror the permission rule in the UI with `canEdit()` from `src/modules/expenses/api.ts`.
 
 Categories are global defaults (`user_id null`, seeded in the migrations, including the `Other` / `Other Income` fallbacks) plus shared custom ones. There are ~30, so both the Categories page and the transaction sheet's picker filter by name; the picker also creates the searched-for category inline (`Add “…” as a new expense category`, or Enter) and offers the `Other` fallback when nothing matches. Inline creation calls `onCategoriesChanged` so the page refetches.
 

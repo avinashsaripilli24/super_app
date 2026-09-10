@@ -176,7 +176,6 @@ function EnableBiometricSheet({
   open: boolean
   onOpenChange: (o: boolean) => void
 }) {
-  const session = useAuthStore((s) => s.session)
   const profile = useAuthStore((s) => s.profile)
   const {
     register,
@@ -197,7 +196,7 @@ function EnableBiometricSheet({
         setError('pin', { message: wrongPinMessage(result) })
         return
       }
-      await enrollBiometric({ id: userId, email: session?.user.email, name: profile?.full_name })
+      await enrollBiometric({ id: userId, phone: profile?.phone, name: profile?.full_name })
       toast.success('Fingerprint / Face ID turned on')
       onOpenChange(false)
     } catch (err) {

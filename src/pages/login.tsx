@@ -10,12 +10,13 @@ import { AppLogo } from '@/components/app-logo'
 import { Button } from '@/components/ui/button'
 import { Field } from '@/components/ui/field'
 import { Input } from '@/components/ui/input'
+import { mobileSchema } from '@/lib/phone'
 import { errorMessage } from '@/lib/utils'
 import { useAppLock } from '@/store/app-lock-store'
 import { useAuthStore } from '@/store/auth-store'
 
 const schema = z.object({
-  email: z.email('Enter a valid email'),
+  phone: mobileSchema,
   password: z.string().min(1, 'Password is required'),
 })
 type FormValues = z.infer<typeof schema>
@@ -30,11 +31,11 @@ export function LoginPage() {
     register,
     handleSubmit,
     formState: { errors, isSubmitting },
-  } = useForm<FormValues>({ resolver: zodResolver(schema), defaultValues: { email: '', password: '' } })
+  } = useForm<FormValues>({ resolver: zodResolver(schema), defaultValues: { phone: '', password: '' } })
 
   const onSubmit = async (values: FormValues) => {
     try {
-      await signIn(values.email.trim(), values.password)
+      await signIn(values.phone, values.password)
       // The password just proved it's you: skip the app lock for this session
       // (a device with no PIN yet still gets the setup screen).
       useAppLock.getState().unlockApp()
@@ -56,15 +57,14 @@ export function LoginPage() {
         </div>
 
         <form onSubmit={handleSubmit(onSubmit)} className="space-y-4 rounded-2xl border bg-card p-5 shadow-xs">
-          <Field label="Email" htmlFor="email" error={errors.email?.message}>
+          <Field label="Mobile number" htmlFor="phone" error={errors.phone?.message}>
             <Input
-              id="email"
-              type="email"
-              autoComplete="email"
-              inputMode="email"
-              placeholder="you@example.com"
-              aria-invalid={!!errors.email}
-              {...register('email')}
+              id="phone"
+              type="tel"
+              autoComplete="tel-national"
+              placeholder="98765 43210"
+              aria-invalid={!!errors.phone}
+              {...register('phone')}
             />
           </Field>
           <Field label="Password" htmlFor="password" error={errors.password?.message}>

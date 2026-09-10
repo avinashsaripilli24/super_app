@@ -19,7 +19,7 @@ npm install
 # 1. Start local Supabase (first time pulls Docker images; takes a few minutes)
 npm run db:start
 
-# 2. Apply migrations + seed (creates the default admin and mock data)
+# 2. Apply migrations + seed (creates the default admin; no other data)
 npm run db:reset
 
 # 3. Create .env from the running stack
@@ -37,12 +37,11 @@ npm run dev
 
 Open http://localhost:5173 and sign in with the default admin:
 
-| Email                | Password   | Role  |
-| -------------------- | ---------- | ----- |
-| admin@superapp.local | Admin@123  | admin |
-| priya@superapp.local | Priya@123  | user  |
+| Mobile number | Password   | Role  |
+| ------------- | ---------- | ----- |
+| 9999999999    | Admin@1234 | admin |
 
-Change the password from **Settings** after first login. Other users are created from **Users** (admin only) with a temporary password. The expense ledger is shared: everyone sees every transaction with who added it; only the creator or an admin can edit or delete a row.
+Both are placeholders and this repo is public: right after the first sign-in, change the number (**Users** → ⋮ → **Change mobile number**) and the password (**Settings**). Everyone signs in with a mobile number and password (no SMS; see `src/lib/phone.ts`). Other users are created from **Users** (admin only) with a mobile number and a temporary password. The expense ledger is shared: everyone sees every transaction with who added it; only the creator or an admin can edit or delete a row.
 
 Local tooling: Studio http://localhost:54323 · Mailpit http://localhost:54324
 
@@ -67,9 +66,9 @@ Local tooling: Studio http://localhost:54323 · Mailpit http://localhost:54324
 ```
 supabase/
   config.toml            local stack config (signup disabled, analytics off)
-  seed.sql               default admin + mock expense data (dev only)
+  seed.sql               the default admin only (local and, once, hosted)
   migrations/            schema + RLS
-  functions/admin-users  create / deactivate / reactivate / reset-password
+  functions/admin-users  create / deactivate / reactivate / reset-password / set-phone
 src/
   lib/                   supabase client, admin-users client, db types, utils
   store/auth-store.ts    session + profile (zustand)
@@ -100,11 +99,11 @@ powershell -ExecutionPolicy Bypass -File scripts/generate-icons.ps1
 ```powershell
 npx supabase login
 npx supabase link --project-ref <ref>
-npx supabase db push
+npx supabase db push --include-seed
 npx supabase functions deploy admin-users
 ```
 
-Create the first admin on the hosted project from the Supabase dashboard (Auth → Users → Add user) and set `app_metadata.role = "admin"`, or run the seed's `auth.admin.createUser` equivalent once. The dev seed is never pushed.
+`--include-seed` creates the default admin (9999999999 / Admin@1234) on the hosted project; the seed holds nothing else. Sign in on the live site straight away and change both the number and the password, since both are public in this repo. Re-running the seed never resets them.
 
 ## Hosting on GitHub Pages
 

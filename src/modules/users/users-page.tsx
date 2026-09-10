@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { flexRender, getCoreRowModel, useReactTable, type ColumnDef } from '@tanstack/react-table'
 import { format, parseISO } from 'date-fns'
-import { Copy, KeyRound, MoreVertical, Plus, RefreshCw, Search, UserCheck, UserX } from 'lucide-react'
+import { Copy, KeyRound, MoreVertical, Plus, RefreshCw, Search, Smartphone, UserCheck, UserX } from 'lucide-react'
 import { Controller, useForm } from 'react-hook-form'
 import { toast } from 'sonner'
 
@@ -42,18 +42,27 @@ import {
   listUsersPage,
   reactivateUser,
   resetUserPassword,
+  setUserPhone,
   type UserProfile,
 } from '@/lib/admin-users'
+import { formatPhone } from '@/lib/phone'
+import { supabase } from '@/lib/supabase'
 import { errorMessage } from '@/lib/utils'
 import {
+  changePhoneSchema,
   createUserSchema,
   resetPasswordSchema,
+  type ChangePhoneValues,
   type CreateUserValues,
   type ResetPasswordValues,
 } from '@/modules/users/schemas'
 import { useAuthStore } from '@/store/auth-store'
 
-/** Shimmer shaped like one table row: name/email block + two badges. */
+/** Login number for display; a row without one falls back to its auth email. */
+const contactOf = (u: UserProfile) => formatPhone(u.phone) ?? u.email
+const labelOf = (u: UserProfile) => u.full_name || contactOf(u)
+
+/** Shimmer shaped like one table row: name/number block + two badges. */
 const skeletonRow = () => (
   <div className="flex items-center gap-3">
     <Skeleton className="h-10 flex-1" />
@@ -69,6 +78,7 @@ export function UsersPage() {
 
   const [createOpen, setCreateOpen] = useState(false)
   const [resetTarget, setResetTarget] = useState<UserProfile | null>(null)
+  const [phoneTarget, setPhoneTarget] = useState<UserProfile | null>(null)
   const [toggleTarget, setToggleTarget] = useState<UserProfile | null>(null)
   const [toggling, setToggling] = useState(false)
 
@@ -84,14 +94,14 @@ export function UsersPage() {
       {
         id: 'user',
         header: 'User',
-        accessorFn: (u) => `${u.full_name ?? ''} ${u.email}`.toLowerCase(),
+        accessorFn: (u) => `${u.full_name ?? ''} ${contactOf(u)}`.toLowerCase(),
         cell: ({ row }) => (
           <div className="min-w-0">
             <p className="truncate font-medium">
               {row.original.full_name || '—'}
               {row.original.id === me?.id && <span className="ml-1 text-xs text-muted-foreground">(you)</span>}
             </p>
-            <p className="truncate text-xs text-muted-foreground">{row.original.email}</p>
+            <p className="truncate text-xs text-muted-foreground">{contactOf(row.original)}</p>
           </div>
         ),
       },
@@ -137,6 +147,9 @@ export function UsersPage() {
                 <DropdownMenuItem onSelect={() => setResetTarget(u)}>
                   <KeyRound /> Reset password
                 </DropdownMenuItem>
+                <DropdownMenuItem onSelect={() => setPhoneTarget(u)}>
+                  <Smartphone /> Change mobile number
+                </DropdownMenuItem>
                 {u.is_active ? (
                   <DropdownMenuItem disabled={isSelf} onSelect={() => setToggleTarget(u)}>
                     <UserX /> Deactivate
@@ -164,10 +177,10 @@ export function UsersPage() {
     try {
       if (toggleTarget.is_active) {
         await deactivateUser(toggleTarget.id)
-        toast.success(`${toggleTarget.email} deactivated`)
+        toast.success(`${labelOf(toggleTarget)} deactivated`)
       } else {
         await reactivateUser(toggleTarget.id)
-        toast.success(`${toggleTarget.email} reactivated`)
+        toast.success(`${labelOf(toggleTarget)} reactivated`)
       }
       setToggleTarget(null)
       reload()
@@ -199,7 +212,7 @@ export function UsersPage() {
         <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
         <Input
           type="search"
-          placeholder="Search by name or email"
+          placeholder="Search by name or mobile"
           className="pl-9"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
@@ -267,11 +280,16 @@ export function UsersPage() {
 
       <CreateUserSheet open={createOpen} onOpenChange={setCreateOpen} onSaved={reload} />
       <ResetPasswordSheet target={resetTarget} onOpenChange={(o) => !o && setResetTarget(null)} />
+      <ChangePhoneSheet target={phoneTarget} onOpenChange={(o) => !o && setPhoneTarget(null)} onSaved={reload} />
 
       <ConfirmDialog
         open={!!toggleTarget}
         onOpenChange={(o) => !o && setToggleTarget(null)}
-        title={toggleTarget?.is_active ? `Deactivate ${toggleTarget.email}?` : `Reactivate ${toggleTarget?.email}?`}
+        title={
+          toggleTarget?.is_active
+            ? `Deactivate ${labelOf(toggleTarget)}?`
+            : `Reactivate ${toggleTarget ? labelOf(toggleTarget) : ''}?`
+        }
         description={
           toggleTarget?.is_active
             ? 'They will be signed out and unable to sign in until reactivated.'
@@ -316,18 +334,18 @@ function CreateUserSheet({
     formState: { errors, isSubmitting },
   } = useForm<CreateUserValues>({
     resolver: zodResolver(createUserSchema),
-    defaultValues: { full_name: '', email: '', role: 'user', password: '' },
+    defaultValues: { full_name: '', phone: '', role: 'user', password: '' },
   })
 
   useEffect(() => {
-    if (open) reset({ full_name: '', email: '', role: 'user', password: generateTempPassword() })
+    if (open) reset({ full_name: '', phone: '', role: 'user', password: generateTempPassword() })
   }, [open, reset])
 
   const onSubmit = async (values: CreateUserValues) => {
     try {
-      await createUser({ ...values, email: values.email.trim().toLowerCase() })
+      await createUser(values)
       toast.success('User created', {
-        description: `Share the temporary password with ${values.email}.`,
+        description: `${values.full_name} signs in with ${formatPhone(values.phone)}. Share the temporary password with them.`,
         action: { label: 'Copy password', onClick: () => void copy(values.password) },
         duration: 10_000,
       })
@@ -343,22 +361,15 @@ function CreateUserSheet({
       <SheetContent side="bottom">
         <SheetHeader>
           <SheetTitle>Add user</SheetTitle>
-          <SheetDescription>They sign in with this email and temporary password.</SheetDescription>
+          <SheetDescription>They sign in with this mobile number and temporary password.</SheetDescription>
         </SheetHeader>
         <form onSubmit={handleSubmit(onSubmit)} className="flex min-h-0 flex-1 flex-col">
           <SheetBody className="space-y-4">
             <Field label="Full name" htmlFor="u-name" error={errors.full_name?.message}>
               <Input id="u-name" autoComplete="off" autoCapitalize="words" placeholder="Jane Doe" {...register('full_name')} />
             </Field>
-            <Field label="Email" htmlFor="u-email" error={errors.email?.message}>
-              <Input
-                id="u-email"
-                type="email"
-                inputMode="email"
-                autoComplete="off"
-                placeholder="jane@example.com"
-                {...register('email')}
-              />
+            <Field label="Mobile number" htmlFor="u-phone" error={errors.phone?.message}>
+              <Input id="u-phone" type="tel" autoComplete="off" placeholder="98765 43210" {...register('phone')} />
             </Field>
             <Field label="Role" error={errors.role?.message}>
               <Controller
@@ -457,7 +468,7 @@ function ResetPasswordSheet({
     try {
       await resetUserPassword(target.id, values.password)
       toast.success('Password reset', {
-        description: `Share the new temporary password with ${target.email}.`,
+        description: `Share the new temporary password with ${labelOf(target)}.`,
         action: { label: 'Copy password', onClick: () => void copy(values.password) },
         duration: 10_000,
       })
@@ -472,7 +483,7 @@ function ResetPasswordSheet({
       <SheetContent side="bottom">
         <SheetHeader>
           <SheetTitle>Reset password</SheetTitle>
-          <SheetDescription>{target?.email}</SheetDescription>
+          <SheetDescription>{target && `${labelOf(target)} · ${contactOf(target)}`}</SheetDescription>
         </SheetHeader>
         <form onSubmit={handleSubmit(onSubmit)} className="flex min-h-0 flex-1 flex-col">
           <SheetBody className="space-y-4">
@@ -514,6 +525,79 @@ function ResetPasswordSheet({
             </Button>
             <Button type="submit" disabled={isSubmitting}>
               {isSubmitting ? 'Saving…' : 'Reset password'}
+            </Button>
+          </SheetFooter>
+        </form>
+      </SheetContent>
+    </Sheet>
+  )
+}
+
+function ChangePhoneSheet({
+  target,
+  onOpenChange,
+  onSaved,
+}: {
+  target: UserProfile | null
+  onOpenChange: (o: boolean) => void
+  onSaved: () => void
+}) {
+  const me = useAuthStore((s) => s.profile)
+  const {
+    register,
+    handleSubmit,
+    reset,
+    formState: { errors, isSubmitting },
+  } = useForm<ChangePhoneValues>({
+    resolver: zodResolver(changePhoneSchema),
+    defaultValues: { phone: '' },
+  })
+
+  useEffect(() => {
+    if (target) reset({ phone: target.phone?.replace(/^\+91/, '') ?? '' })
+  }, [target, reset])
+
+  const onSubmit = async (values: ChangePhoneValues) => {
+    if (!target) return
+    try {
+      await setUserPhone(target.id, values.phone)
+      if (target.id === me?.id) {
+        // Your own number: the session still holds the old auth email (Forgot
+        // PIN signs in with it) until it is refreshed.
+        await supabase.auth.refreshSession()
+        await useAuthStore.getState().refreshProfile()
+      }
+      toast.success('Mobile number changed', {
+        description: `${labelOf(target)} now signs in with ${formatPhone(values.phone)}.`,
+      })
+      onOpenChange(false)
+      onSaved()
+    } catch (err) {
+      toast.error(errorMessage(err))
+    }
+  }
+
+  return (
+    <Sheet open={!!target} onOpenChange={onOpenChange}>
+      <SheetContent side="bottom">
+        <SheetHeader>
+          <SheetTitle>Change mobile number</SheetTitle>
+          <SheetDescription>
+            {target && `${labelOf(target)} signs in with this number from now on. Their password stays the same.`}
+          </SheetDescription>
+        </SheetHeader>
+        <form onSubmit={handleSubmit(onSubmit)} className="flex min-h-0 flex-1 flex-col">
+          <SheetBody className="space-y-4">
+            <Field label="Mobile number" htmlFor="p-phone" error={errors.phone?.message}>
+              <Input id="p-phone" type="tel" autoComplete="off" placeholder="98765 43210" {...register('phone')} />
+            </Field>
+          </SheetBody>
+          <SheetFooter>
+            <Button type="button" variant="ghost" onClick={() => onOpenChange(false)} disabled={isSubmitting}>
+              Cancel
+            </Button>
+            <Button type="submit" disabled={isSubmitting}>
+              {isSubmitting ? 'Saving…' : 'Change number'}
             </Button>
           </SheetFooter>
         </form>

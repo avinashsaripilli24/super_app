@@ -6,10 +6,11 @@
 // admin before a service-role client performs the action.
 //
 // Actions (POST JSON body):
-//   { action: "create", email, password, full_name, role? }
+//   { action: "create", phone, password, full_name, role? }
 //   { action: "deactivate", user_id }
 //   { action: "reactivate", user_id }
 //   { action: "reset_password", user_id, password }
+//   { action: "set_phone", user_id, phone }
 
 import { createClient } from 'npm:@supabase/supabase-js@2'
 import { z } from 'npm:zod@3'
@@ -27,10 +28,34 @@ function json(body: unknown, status = 200) {
   })
 }
 
+// Users sign in with a mobile number; auth runs on an internal email derived
+// from it. Copy of src/lib/phone.ts (Deno can't import from src/): keep in sync.
+function normalizeMobile(input: string): string | null {
+  let digits = input.replace(/[\s()-]/g, '')
+  if (digits.startsWith('+91')) digits = digits.slice(3)
+  else if (digits.length === 12 && digits.startsWith('91')) digits = digits.slice(2)
+  else if (digits.length === 11 && digits.startsWith('0')) digits = digits.slice(1)
+  return /^[6-9]\d{9}$/.test(digits) ? `+91${digits}` : null
+}
+const phoneToAuthEmail = (e164: string) => `${e164.replace(/^\+/, '')}@phone.superapp.local`
+
+const mobile = z
+  .string()
+  .transform((v) => normalizeMobile(v))
+  .refine((v): v is string => v !== null, 'Enter a 10-digit mobile number')
+
+// The internal email is unique in auth, so a taken number surfaces as email_exists.
+function authError(error: { code?: string; message: string }) {
+  if (error.code === 'email_exists' || /already been registered/i.test(error.message)) {
+    return json({ error: 'A user with this mobile number already exists' }, 400)
+  }
+  return json({ error: error.message }, 400)
+}
+
 const Body = z.discriminatedUnion('action', [
   z.object({
     action: z.literal('create'),
-    email: z.string().email(),
+    phone: mobile,
     password: z.string().min(8),
     full_name: z.string().min(1).max(120),
     role: z.enum(['admin', 'user']).default('user'),
@@ -42,6 +67,7 @@ const Body = z.discriminatedUnion('action', [
     user_id: z.string().uuid(),
     password: z.string().min(8),
   }),
+  z.object({ action: z.literal('set_phone'), user_id: z.string().uuid(), phone: mobile }),
 ])
 
 Deno.serve(async (req) => {
@@ -91,14 +117,21 @@ Deno.serve(async (req) => {
   switch (body.action) {
     case 'create': {
       const { data, error } = await admin.auth.admin.createUser({
-        email: body.email,
+        email: phoneToAuthEmail(body.phone),
         password: body.password,
         email_confirm: true,
         user_metadata: { full_name: body.full_name },
-        // Consumed by public.handle_new_user() to set profiles.role.
-        app_metadata: { role: body.role },
+        app_metadata: { role: body.role, phone: body.phone },
       })
-      if (error) return json({ error: error.message }, 400)
+      if (error) return authError(error)
+      // GoTrue applies app_metadata after inserting the user, so
+      // handle_new_user() (an insert trigger) never sees role / phone here:
+      // write them onto the profile it created.
+      const { error: pErr } = await admin
+        .from('profiles')
+        .update({ role: body.role, phone: body.phone })
+        .eq('id', data.user.id)
+      if (pErr) return json({ error: pErr.message }, 400)
       return json({ user_id: data.user.id })
     }
 
@@ -134,6 +167,33 @@ Deno.serve(async (req) => {
         password: body.password,
       })
       if (error) return json({ error: error.message }, 400)
+      return json({ ok: true })
+    }
+
+    // The login number lives in three places: the auth email it maps to,
+    // app_metadata.phone and profiles.phone. The email trigger updates
+    // profiles.email; app_metadata is merged, so role is kept.
+    case 'set_phone': {
+      // GoTrue reports a duplicate email on update only as a generic failure;
+      // profiles.email mirrors the auth email, so check it first.
+      const { data: taken } = await admin
+        .from('profiles')
+        .select('id')
+        .eq('email', phoneToAuthEmail(body.phone))
+        .neq('id', body.user_id)
+        .maybeSingle()
+      if (taken) return json({ error: 'A user with this mobile number already exists' }, 400)
+      const { error } = await admin.auth.admin.updateUserById(body.user_id, {
+        email: phoneToAuthEmail(body.phone),
+        email_confirm: true,
+        app_metadata: { phone: body.phone },
+      })
+      if (error) return authError(error)
+      const { error: pErr } = await admin
+        .from('profiles')
+        .update({ phone: body.phone })
+        .eq('id', body.user_id)
+      if (pErr) return json({ error: pErr.message }, 400)
       return json({ ok: true })
     }
   }

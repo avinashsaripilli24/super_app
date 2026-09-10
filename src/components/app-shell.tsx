@@ -13,14 +13,15 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
+import { formatPhone } from '@/lib/phone'
 import { cn } from '@/lib/utils'
 import { moduleForPath, modulesForRole, tabBarModules } from '@/modules/registry'
 import { useAuthStore } from '@/store/auth-store'
 
-function initials(name: string | null | undefined, email: string | undefined) {
-  const src = (name && name.trim()) || email || '?'
+function initials(name: string | null | undefined) {
+  const src = (name && name.trim()) || '?'
   return src
-    .split(/[\s@._-]+/)
+    .split(/[\s._-]+/)
     .filter(Boolean)
     .slice(0, 2)
     .map((s) => s[0]!.toUpperCase())
@@ -98,7 +99,7 @@ export function AppShell() {
                   aria-label="Account menu"
                   className="grid size-9 place-items-center rounded-full bg-accent text-sm font-semibold text-accent-foreground outline-none ring-offset-background focus-visible:ring-2 focus-visible:ring-ring/60 focus-visible:ring-offset-2"
                 >
-                  {initials(profile?.full_name, profile?.email)}
+                  {initials(profile?.full_name)}
                 </button>
               </DropdownMenuTrigger>
               <DropdownMenuContent>
@@ -106,7 +107,7 @@ export function AppShell() {
                   <p className="truncate text-sm font-medium text-foreground">
                     {profile?.full_name || 'Account'}
                   </p>
-                  <p className="truncate text-xs font-normal">{profile?.email}</p>
+                  <p className="truncate text-xs font-normal">{formatPhone(profile?.phone) ?? profile?.email}</p>
                 </DropdownMenuLabel>
                 <DropdownMenuSeparator />
                 {menuOnly.map((m) => (

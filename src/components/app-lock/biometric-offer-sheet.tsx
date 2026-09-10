@@ -26,7 +26,7 @@ export function BiometricOfferSheet({ open, onOpenChange }: { open: boolean; onO
     if (!session) return
     setBusy(true)
     try {
-      await enrollBiometric({ id: session.user.id, email: session.user.email, name: profile?.full_name })
+      await enrollBiometric({ id: session.user.id, phone: profile?.phone, name: profile?.full_name })
       toast.success('Fingerprint / Face ID turned on')
       onOpenChange(false)
     } catch (err) {

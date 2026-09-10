@@ -14,6 +14,7 @@ import { Field } from '@/components/ui/field'
 import { Input } from '@/components/ui/input'
 import { Skeleton } from '@/components/ui/skeleton'
 import { usePwaInstall } from '@/hooks/use-pwa-install'
+import { formatPhone } from '@/lib/phone'
 import { supabase } from '@/lib/supabase'
 import { cn, errorMessage } from '@/lib/utils'
 import { useAuthStore } from '@/store/auth-store'
@@ -40,7 +41,7 @@ export function SettingsPage() {
     <div className="space-y-4">
       <ProfileCard
         fullName={profile?.full_name ?? ''}
-        email={profile?.email}
+        phone={formatPhone(profile?.phone) ?? profile?.email}
         role={profile?.role}
         loading={!profile}
         onSaved={refreshProfile}
@@ -66,13 +67,13 @@ export function SettingsPage() {
 
 function ProfileCard({
   fullName,
-  email,
+  phone,
   role,
   loading,
   onSaved,
 }: {
   fullName: string
-  email?: string
+  phone?: string
   role?: string
   loading: boolean
   onSaved: () => Promise<void>
@@ -119,8 +120,11 @@ function ProfileCard({
               <Input id="full_name" autoComplete="name" autoCapitalize="words" {...register('full_name')} />
             </Field>
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-              <Field label="Email">
-                <Input value={email ?? ''} readOnly disabled />
+              <Field
+                label="Mobile number"
+                hint={role === 'admin' ? 'Change it from Users.' : 'Ask an administrator to change it.'}
+              >
+                <Input value={phone ?? ''} readOnly disabled />
               </Field>
               <Field label="Role">
                 <div className="flex h-10 items-center">

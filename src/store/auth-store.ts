@@ -2,6 +2,7 @@ import type { Session } from '@supabase/supabase-js'
 import { create } from 'zustand'
 
 import type { Tables } from '@/lib/database.types'
+import { phoneToAuthEmail } from '@/lib/phone'
 import { supabase } from '@/lib/supabase'
 
 export type Profile = Tables<'profiles'>
@@ -13,7 +14,8 @@ export interface AuthState {
   profile: Profile | null
   /** Set once the auth store has been hydrated. */
   init: () => () => void
-  signIn: (email: string, password: string) => Promise<void>
+  /** `phone` is E.164 (`mobileSchema` output). */
+  signIn: (phone: string, password: string) => Promise<void>
   signOut: () => Promise<void>
   refreshProfile: () => Promise<void>
 }
@@ -74,8 +76,11 @@ export const useAuthStore = create<AuthState>((set, get) => {
       }
     },
 
-    signIn: async (email, password) => {
-      const { data, error } = await supabase.auth.signInWithPassword({ email, password })
+    signIn: async (phone, password) => {
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email: phoneToAuthEmail(phone),
+        password,
+      })
       if (error) throw error
       await hydrate(data.session)
       if (get().status !== 'signedIn') {
