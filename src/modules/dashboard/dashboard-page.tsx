@@ -16,6 +16,7 @@ import {
   monthRange,
   toMonthSummary,
 } from '@/modules/expenses/api'
+import { RecurringReminder } from '@/modules/expenses/components/recurring-reminder'
 import { modulesForRole } from '@/modules/registry'
 import { useAuthStore } from '@/store/auth-store'
 
@@ -30,7 +31,7 @@ export function DashboardPage() {
   const profile = useAuthStore((s) => s.profile)
   const tiles = modulesForRole(profile?.role).filter((m) => m.onDashboard)
 
-  const { data, loading } = useAsyncData(
+  const { data, loading, reload } = useAsyncData(
     async () => {
       const key = monthKey(new Date())
       const { start, end } = monthRange(key)
@@ -62,6 +63,8 @@ export function DashboardPage() {
         <p className="text-sm text-muted-foreground">{greeting()}</p>
         <h2 className="text-2xl font-semibold tracking-tight">{firstName ?? 'there'} 👋</h2>
       </div>
+
+      <RecurringReminder onAdded={reload} />
 
       {/* This month */}
       <Card>

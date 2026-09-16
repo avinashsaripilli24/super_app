@@ -17,7 +17,8 @@ const DashboardPage = lazyRouteComponent(() => import('@/modules/dashboard/dashb
 const ExpensesPage = lazyRouteComponent(() => import('@/modules/expenses/expenses-page'), 'ExpensesPage')
 const CategoriesPage = lazyRouteComponent(() => import('@/modules/expenses/categories-page'), 'CategoriesPage')
 const BudgetsPage = lazyRouteComponent(() => import('@/modules/expenses/budgets-page'), 'BudgetsPage')
-const YearPage = lazyRouteComponent(() => import('@/modules/expenses/year-page'), 'YearPage')
+const RecurringPage = lazyRouteComponent(() => import('@/modules/expenses/recurring-page'), 'RecurringPage')
+const YearPage =lazyRouteComponent(() => import('@/modules/expenses/year-page'), 'YearPage')
 const UsersPage = lazyRouteComponent(() => import('@/modules/users/users-page'), 'UsersPage')
 const SettingsPage = lazyRouteComponent(() => import('@/modules/settings/settings-page'), 'SettingsPage')
 const AssetsOverviewPage = lazyRouteComponent(() => import('@/modules/assets/overview-page'), 'AssetsOverviewPage')
@@ -115,6 +116,12 @@ const expenseBudgetsRoute = createRoute({
   component: BudgetsPage,
 })
 
+const expenseRecurringRoute = createRoute({
+  getParentRoute: () => authedRoute,
+  path: '/expenses/recurring',
+  component: RecurringPage,
+})
+
 // Assets & debts --------------------------------------------------------------
 
 // Every Assets page sits behind the PIN / fingerprint lock (it re-locks when
@@ -209,6 +216,7 @@ const routeTree = rootRoute.addChildren([
     expenseCategoriesRoute,
     expenseYearRoute,
     expenseBudgetsRoute,
+    expenseRecurringRoute,
     assetsLockRoute.addChildren([
       assetsRoute,
       assetsActivityRoute,

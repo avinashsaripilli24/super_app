@@ -23,6 +23,7 @@ import { amountInWords } from '@/lib/money-words'
 import { cn, errorMessage } from '@/lib/utils'
 import {
   PAYMENT_METHODS,
+  PAYMENT_METHOD_LABEL,
   createCategory,
   createTransaction,
   updateTransaction,
@@ -37,14 +38,6 @@ import { useAuthStore } from '@/store/auth-store'
 
 /** Matches the `name` cap in `categorySchema`. */
 const MAX_CATEGORY_NAME = 40
-
-const METHOD_LABEL: Record<(typeof PAYMENT_METHODS)[number], string> = {
-  cash: 'Cash',
-  upi: 'UPI',
-  card: 'Card',
-  bank: 'Bank transfer',
-  other: 'Other',
-}
 
 function emptyValues(defaultDate: string | undefined, meId: string | undefined): TransactionFormValues {
   return {
@@ -333,7 +326,7 @@ export function TransactionSheet({
                       <SelectContent>
                         {PAYMENT_METHODS.map((m) => (
                           <SelectItem key={m} value={m}>
-                            {METHOD_LABEL[m]}
+                            {PAYMENT_METHOD_LABEL[m]}
                           </SelectItem>
                         ))}
                       </SelectContent>

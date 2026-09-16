@@ -1,33 +1,46 @@
-import { useMemo, useState } from 'react'
+import { useMemo, useReducer, useState } from 'react'
 import { Link, useNavigate, useSearch } from '@tanstack/react-router'
 import { flexRender, getCoreRowModel, useReactTable, type ColumnDef } from '@tanstack/react-table'
 import { BarChart3, Download } from 'lucide-react'
+import { toast } from 'sonner'
 
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 import { MoneyWords } from '@/components/ui/money'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { useAsyncData } from '@/hooks/use-async-data'
-import { cn, formatMoney } from '@/lib/utils'
+import { cn, errorMessage, formatMoney } from '@/lib/utils'
 import {
   EMPTY_SUMMARY,
+  canEdit,
+  deleteTransaction,
   fetchLedgerSummary,
+  liveCategoryRow,
+  listCategories,
   listUserNames,
   monthKey,
   toMonthSummary,
   toMonthTotals,
   toPersonTotals,
   yearRange,
+  type CategoryTotal,
+  type LedgerRow,
   type MonthTotals,
+  type TxnKind,
 } from '@/modules/expenses/api'
 import { CategoryBreakdown } from '@/modules/expenses/components/category-breakdown'
+import { CategoryTransactionsSheet } from '@/modules/expenses/components/category-transactions-sheet'
 import { ExportSheet } from '@/modules/expenses/components/export-sheet'
 import { MonthlyBars } from '@/modules/expenses/components/monthly-bars'
 import { StatTile } from '@/modules/expenses/components/stat-tile'
+import { TransactionSheet } from '@/modules/expenses/components/transaction-sheet'
 import { ViewToggle } from '@/modules/expenses/components/view-toggle'
 import { YearSwitcher } from '@/modules/expenses/components/year-switcher'
+import { useAuthStore } from '@/store/auth-store'
 
+const EMPTY_NAMES = new Map<string, string>()
 const EMPTY_RPC = { spent: 0, income: 0, by_category: [], added_by: [], earned_by: [], by_month: [] }
 
 export function YearPage() {
@@ -35,18 +48,60 @@ export function YearPage() {
   const navigate = useNavigate()
   const currentYear = new Date().getFullYear()
   const year = search.year ?? currentYear
+  const profile = useAuthStore((s) => s.profile)
   const [exportOpen, setExportOpen] = useState(false)
 
-  const { data, loading } = useAsyncData(
+  const { data, loading, reload } = useAsyncData(
     async () => {
       const { start, end } = yearRange(year)
-      const [rpc, names] = await Promise.all([fetchLedgerSummary(start, end), listUserNames()])
-      return { rpc, names }
+      const [rpc, names, categories] = await Promise.all([
+        fetchLedgerSummary(start, end),
+        listUserNames(),
+        listCategories(),
+      ])
+      return { rpc, names, categories }
     },
     String(year),
     'Failed to load the year',
   )
   const summary = useMemo(() => (data ? toMonthSummary(data.rpc) : EMPTY_SUMMARY), [data])
+
+  // Category drill-down: its transactions in a sheet, each opening the edit sheet.
+  const [drill, setDrill] = useState<{ row: CategoryTotal; kind: TxnKind } | null>(null)
+  const [drillOpen, setDrillOpen] = useState(false)
+  const openCategory = (kind: TxnKind) => (row: CategoryTotal) => {
+    setDrill({ row, kind })
+    setDrillOpen(true)
+  }
+  const [listToken, bumpList] = useReducer((n: number) => n + 1, 0)
+  const refreshAll = () => {
+    reload()
+    bumpList()
+  }
+  const [sheetOpen, setSheetOpen] = useState(false)
+  const [editing, setEditing] = useState<LedgerRow | null>(null)
+  const [confirmDelete, setConfirmDelete] = useState<LedgerRow | null>(null)
+  const [deleting, setDeleting] = useState(false)
+  const openRow = (t: LedgerRow) => {
+    setEditing(t)
+    setSheetOpen(true)
+  }
+  const onDelete = async () => {
+    if (!confirmDelete) return
+    setDeleting(true)
+    try {
+      await deleteTransaction(confirmDelete.id)
+      toast.success('Transaction deleted')
+      setConfirmDelete(null)
+      setSheetOpen(false)
+      refreshAll()
+    } catch (err) {
+      toast.error(errorMessage(err))
+    } finally {
+      setDeleting(false)
+    }
+  }
+  const range = yearRange(year)
   const byMonth = useMemo(() => (data ? toMonthTotals(data.rpc, year) : toMonthTotals(EMPTY_RPC, year)), [data, year])
   const byPerson = useMemo(() => (data ? toPersonTotals(data.rpc, data.names) : []), [data])
 
@@ -171,7 +226,11 @@ export function YearPage() {
               <Skeleton className="h-8 w-full" />
             </div>
           ) : (
-            <CategoryBreakdown rows={summary.byCategory} emptyText="No spending recorded this year." />
+            <CategoryBreakdown
+              rows={summary.byCategory}
+              emptyText="No spending recorded this year."
+              onSelect={openCategory('expense')}
+            />
           )}
         </CardContent>
       </Card>
@@ -187,7 +246,11 @@ export function YearPage() {
               <Skeleton className="h-8 w-full" />
             </div>
           ) : (
-            <CategoryBreakdown rows={summary.incomeByCategory} emptyText="No income recorded this year." />
+            <CategoryBreakdown
+              rows={summary.incomeByCategory}
+              emptyText="No income recorded this year."
+              onSelect={openCategory('income')}
+            />
           )}
         </CardContent>
       </Card>
@@ -290,6 +353,43 @@ export function YearPage() {
         month={monthKey(new Date())}
         year={year}
         defaultScope="year"
+      />
+
+      <CategoryTransactionsSheet
+        open={drillOpen}
+        onOpenChange={setDrillOpen}
+        category={drill && liveCategoryRow(drill.row, drill.kind, summary)}
+        kind={drill?.kind ?? 'expense'}
+        start={range.start}
+        end={range.end}
+        periodLabel={String(year)}
+        categories={data?.categories ?? []}
+        names={data?.names ?? EMPTY_NAMES}
+        onSelect={openRow}
+        refreshToken={listToken}
+      />
+
+      <TransactionSheet
+        open={sheetOpen}
+        onOpenChange={setSheetOpen}
+        categories={data?.categories ?? []}
+        people={data?.names ?? EMPTY_NAMES}
+        editing={editing}
+        readOnly={!!editing && !canEdit(editing, profile)}
+        onSaved={refreshAll}
+        onDelete={() => editing && setConfirmDelete(editing)}
+        onCategoriesChanged={reload}
+      />
+
+      <ConfirmDialog
+        open={!!confirmDelete}
+        onOpenChange={(o) => !o && setConfirmDelete(null)}
+        title="Delete this transaction?"
+        description="This cannot be undone."
+        tone="destructive"
+        confirmLabel="Delete"
+        loading={deleting}
+        onConfirm={onDelete}
       />
     </div>
   )

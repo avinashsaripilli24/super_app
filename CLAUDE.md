@@ -38,7 +38,11 @@ The data model in `supabase/migrations/*_expense_tracker.sql` + `*_shared_ledger
 
 Categories are global defaults (`user_id null`, seeded in the migrations, including the `Other` / `Other Income` fallbacks) plus shared custom ones. There are ~30, so both the Categories page and the transaction sheet's picker filter by name; the picker also creates the searched-for category inline (`Add “…” as a new expense category`, or Enter) and offers the `Other` fallback when nothing matches. Inline creation calls `onCategoriesChanged` so the page refetches.
 
+Tapping a row in a "… by category" breakdown (month and year views) opens `CategoryTransactionsSheet`: that category's transactions for the period, paged with `listTransactionsPage` (`categoryId: UNCATEGORISED` matches null categories), with the header figures from the summary (`liveCategoryRow`); its rows open the usual `TransactionSheet`, stacked on top. Breakdowns show the top 6 with a "Show all" toggle.
+
 Excel export lives in `src/modules/expenses/export.ts` (exceljs, dynamically imported). Chart colours are the validated tokens `--chart-spent` / `--chart-income` in `src/index.css`; charts are inline SVG (see `components/monthly-bars.tsx`), no chart library.
+
+**Recurring expenses** (`*_recurring_expenses.sql`, `/expenses/recurring`, linked from Settings): shared expense templates (same RLS as the ledger) with a `day_of_month` capped at 27 so it exists in every month. Nothing is inserted automatically: `AddRecurringSheet` adds the chosen active items to a month in one insert, dated on their day (`recurringDate`). Inserted transactions carry `recurring_id`, used only to hint "Already added on …" (those start switched off); duplicates are allowed on purpose. `RecurringReminder` (Dashboard + current month on Expenses) shows from the 1st while an active item hasn't been added that month; dismissal is per user per month in localStorage.
 
 Replace the model when real requirements arrive; keep the module folder + registry entry pattern.
 

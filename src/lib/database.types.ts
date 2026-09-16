@@ -376,6 +376,53 @@ export type Database = {
         }
         Relationships: []
       }
+      recurring_expenses: {
+        Row: {
+          active: boolean
+          amount: number
+          category_id: string | null
+          created_at: string
+          day_of_month: number
+          id: string
+          note: string | null
+          payment_method: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          active?: boolean
+          amount: number
+          category_id?: string | null
+          created_at?: string
+          day_of_month: number
+          id?: string
+          note?: string | null
+          payment_method?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Update: {
+          active?: boolean
+          amount?: number
+          category_id?: string | null
+          created_at?: string
+          day_of_month?: number
+          id?: string
+          note?: string | null
+          payment_method?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "recurring_expenses_category_id_fkey"
+            columns: ["category_id"]
+            isOneToOne: false
+            referencedRelation: "expense_categories"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       transactions: {
         Row: {
           amount: number
@@ -388,6 +435,7 @@ export type Database = {
           note: string | null
           occurred_on: string
           payment_method: string | null
+          recurring_id: string | null
           updated_at: string
           user_id: string
         }
@@ -402,6 +450,7 @@ export type Database = {
           note?: string | null
           occurred_on?: string
           payment_method?: string | null
+          recurring_id?: string | null
           updated_at?: string
           user_id?: string
         }
@@ -416,6 +465,7 @@ export type Database = {
           note?: string | null
           occurred_on?: string
           payment_method?: string | null
+          recurring_id?: string | null
           updated_at?: string
           user_id?: string
         }
@@ -425,6 +475,13 @@ export type Database = {
             columns: ["category_id"]
             isOneToOne: false
             referencedRelation: "expense_categories"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "transactions_recurring_id_fkey"
+            columns: ["recurring_id"]
+            isOneToOne: false
+            referencedRelation: "recurring_expenses"
             referencedColumns: ["id"]
           },
         ]

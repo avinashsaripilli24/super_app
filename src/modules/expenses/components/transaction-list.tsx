@@ -11,10 +11,12 @@ import { useDebouncedValue } from '@/hooks/use-debounced-value'
 import { DEFAULT_PAGE_SIZE, useInfiniteList } from '@/hooks/use-infinite-list'
 import { cn, formatMoney } from '@/lib/utils'
 import {
+  groupByDay,
   listTransactionsPage,
   monthRange,
   withNames,
   type Category,
+  type DayGroup,
   type LedgerRow,
   type TransactionFilters,
   type TxnKind,
@@ -89,15 +91,7 @@ export function TransactionList({
     if (refreshToken > 0) reload()
   }, [refreshToken, reload])
 
-  const groups = useMemo(() => {
-    const out: { day: string; items: LedgerRow[] }[] = []
-    for (const t of list.items) {
-      const last = out[out.length - 1]
-      if (last && last.day === t.occurred_on) last.items.push(t)
-      else out.push({ day: t.occurred_on, items: [t] })
-    }
-    return out
-  }, [list.items])
+  const groups = useMemo(() => groupByDay(list.items), [list.items])
 
   const people = useMemo(() => [...names.entries()].sort((a, b) => a[1].localeCompare(b[1])), [names])
 
@@ -165,43 +159,7 @@ export function TransactionList({
           />
         )
       ) : (
-        <div className="space-y-4">
-          {groups.map((g) => (
-            <section key={g.day}>
-              <h3 className="mb-1 px-1 text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                {format(parseISO(g.day), 'EEE, d MMM')}
-              </h3>
-              <ul className="divide-y overflow-hidden rounded-xl border bg-card">
-                {g.items.map((t) => (
-                  <li key={t.id} data-id={t.id}>
-                    <button
-                      type="button"
-                      onClick={() => onSelect(t)}
-                      className="flex w-full items-center gap-3 px-3 py-2.5 text-left transition-colors hover:bg-accent/60 active:bg-accent"
-                    >
-                      <CategoryIcon icon={t.category?.icon} color={t.category?.color} />
-                      <div className="min-w-0 flex-1">
-                        <p className="break-words text-sm font-medium">{t.note || t.category?.name || 'Transaction'}</p>
-                        <p className="line-clamp-2 text-xs text-muted-foreground">
-                          {t.kind === 'income' ? <IncomeMeta t={t} /> : <ExpenseMeta t={t} />}
-                        </p>
-                      </div>
-                      <span
-                        className={cn(
-                          'shrink-0 text-sm font-semibold tabular-nums',
-                          t.kind === 'income' ? 'text-success' : 'text-foreground',
-                        )}
-                      >
-                        {t.kind === 'income' ? '+' : '−'}
-                        {formatMoney(Number(t.amount), t.currency)}
-                      </span>
-                    </button>
-                  </li>
-                ))}
-              </ul>
-            </section>
-          ))}
-        </div>
+        <DayGroups groups={groups} onSelect={onSelect} />
       )}
 
       {!list.loading && (
@@ -216,6 +174,55 @@ export function TransactionList({
         />
       )}
     </div>
+  )
+}
+
+/** Day headings, each over a card of tappable transaction rows. */
+export function DayGroups({ groups, onSelect }: { groups: DayGroup[]; onSelect: (t: LedgerRow) => void }) {
+  return (
+    <div className="space-y-4">
+      {groups.map((g) => (
+        <section key={g.day}>
+          <h3 className="mb-1 px-1 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+            {format(parseISO(g.day), 'EEE, d MMM')}
+          </h3>
+          <ul className="divide-y overflow-hidden rounded-xl border bg-card">
+            {g.items.map((t) => (
+              <li key={t.id} data-id={t.id}>
+                <TransactionRow t={t} onSelect={onSelect} />
+              </li>
+            ))}
+          </ul>
+        </section>
+      ))}
+    </div>
+  )
+}
+
+export function TransactionRow({ t, onSelect }: { t: LedgerRow; onSelect: (t: LedgerRow) => void }) {
+  return (
+    <button
+      type="button"
+      onClick={() => onSelect(t)}
+      className="flex w-full items-center gap-3 px-3 py-2.5 text-left transition-colors hover:bg-accent/60 active:bg-accent"
+    >
+      <CategoryIcon icon={t.category?.icon} color={t.category?.color} />
+      <div className="min-w-0 flex-1">
+        <p className="break-words text-sm font-medium">{t.note || t.category?.name || 'Transaction'}</p>
+        <p className="line-clamp-2 text-xs text-muted-foreground">
+          {t.kind === 'income' ? <IncomeMeta t={t} /> : <ExpenseMeta t={t} />}
+        </p>
+      </div>
+      <span
+        className={cn(
+          'shrink-0 whitespace-nowrap text-sm font-semibold tabular-nums',
+          t.kind === 'income' ? 'text-success' : 'text-foreground',
+        )}
+      >
+        {t.kind === 'income' ? '+' : '−'}
+        {formatMoney(Number(t.amount), t.currency)}
+      </span>
+    </button>
   )
 }
 

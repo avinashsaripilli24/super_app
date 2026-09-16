@@ -1,6 +1,7 @@
 import { useMemo, useReducer, useState } from 'react'
 import { Link, useNavigate, useSearch } from '@tanstack/react-router'
-import { Download, Plus, Settings2, Target } from 'lucide-react'
+import { format } from 'date-fns'
+import { Download, Plus, Repeat, Settings2, Target } from 'lucide-react'
 import { toast } from 'sonner'
 
 import { Button } from '@/components/ui/button'
@@ -16,17 +17,22 @@ import {
   canEdit,
   deleteTransaction,
   fetchLedgerSummary,
+  liveCategoryRow,
   listBudgetsForMonth,
   listCategories,
   listUserNames,
   monthKey,
   monthRange,
   toMonthSummary,
+  type CategoryTotal,
   type LedgerRow,
+  type TxnKind,
 } from '@/modules/expenses/api'
 import { CategoryBreakdown } from '@/modules/expenses/components/category-breakdown'
+import { CategoryTransactionsSheet } from '@/modules/expenses/components/category-transactions-sheet'
 import { ExportSheet } from '@/modules/expenses/components/export-sheet'
 import { MonthSwitcher } from '@/modules/expenses/components/month-switcher'
+import { RecurringReminder } from '@/modules/expenses/components/recurring-reminder'
 import { StatTile } from '@/modules/expenses/components/stat-tile'
 import { TransactionList } from '@/modules/expenses/components/transaction-list'
 import { TransactionSheet } from '@/modules/expenses/components/transaction-sheet'
@@ -72,6 +78,13 @@ export function ExpensesPage() {
   const [editing, setEditing] = useState<LedgerRow | null>(null)
   const [confirmDelete, setConfirmDelete] = useState<LedgerRow | null>(null)
   const [deleting, setDeleting] = useState(false)
+  // Breakdown row whose transactions are open (kept through the close animation).
+  const [drill, setDrill] = useState<{ row: CategoryTotal; kind: TxnKind } | null>(null)
+  const [drillOpen, setDrillOpen] = useState(false)
+  const openCategory = (kind: TxnKind) => (row: CategoryTotal) => {
+    setDrill({ row, kind })
+    setDrillOpen(true)
+  }
   const overallBudget = budgets.find((b) => b.category_id === null)
   const budgetAmount = overallBudget ? Number(overallBudget.amount) : 0
   const budgetPct = budgetAmount > 0 ? Math.min(1, summary.spent / budgetAmount) : 0
@@ -107,6 +120,7 @@ export function ExpensesPage() {
   // Default date for new transactions: today if viewing current month, else the 1st.
   const defaultDate = month === monthKey(new Date()) ? undefined : `${month}-01`
   const year = Number(month.slice(0, 4))
+  const range = monthRange(month)
 
   return (
     // Bottom padding keeps the last row clear of the floating + button.
@@ -115,12 +129,19 @@ export function ExpensesPage() {
         <div className="flex-1">
           <ViewToggle active="month" />
         </div>
+        <Button asChild variant="outline" size="icon-sm" aria-label="Recurring expenses">
+          <Link to="/expenses/recurring">
+            <Repeat />
+          </Link>
+        </Button>
         <Button variant="outline" size="sm" onClick={() => setExportOpen(true)}>
           <Download /> Export
         </Button>
       </div>
 
       <MonthSwitcher value={month} onChange={setMonth} />
+
+      {month === monthKey(new Date()) && <RecurringReminder onAdded={refreshAll} />}
 
       {/* Totals */}
       {loading ? (
@@ -207,7 +228,7 @@ export function ExpensesPage() {
               <Skeleton className="h-8 w-full" />
             </div>
           ) : (
-            <CategoryBreakdown rows={summary.byCategory} />
+            <CategoryBreakdown rows={summary.byCategory} onSelect={openCategory('expense')} />
           )}
         </CardContent>
       </Card>
@@ -224,7 +245,11 @@ export function ExpensesPage() {
               <Skeleton className="h-8 w-full" />
             </div>
           ) : (
-            <CategoryBreakdown rows={summary.incomeByCategory} emptyText="No income recorded this month." />
+            <CategoryBreakdown
+              rows={summary.incomeByCategory}
+              emptyText="No income recorded this month."
+              onSelect={openCategory('income')}
+            />
           )}
         </CardContent>
       </Card>
@@ -255,6 +280,21 @@ export function ExpensesPage() {
         <Plus className="size-6" />
       </Button>
 
+      <CategoryTransactionsSheet
+        open={drillOpen}
+        onOpenChange={setDrillOpen}
+        category={drill && liveCategoryRow(drill.row, drill.kind, summary)}
+        kind={drill?.kind ?? 'expense'}
+        start={range.start}
+        end={range.end}
+        periodLabel={format(range.date, 'MMMM yyyy')}
+        categories={categories}
+        names={names}
+        onSelect={openRow}
+        refreshToken={listToken}
+      />
+
+      {/* After the category sheet, so editing a row from it stacks on top. */}
       <TransactionSheet
         open={sheetOpen}
         onOpenChange={setSheetOpen}

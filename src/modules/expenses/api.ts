@@ -33,6 +33,14 @@ export type UserNames = Map<string, string>
 export const PAYMENT_METHODS = ['cash', 'upi', 'card', 'bank', 'other'] as const
 export type PaymentMethod = (typeof PAYMENT_METHODS)[number]
 
+export const PAYMENT_METHOD_LABEL: Record<PaymentMethod, string> = {
+  cash: 'Cash',
+  upi: 'UPI',
+  card: 'Card',
+  bank: 'Bank transfer',
+  other: 'Other',
+}
+
 /** `YYYY-MM` for the given date. */
 export function monthKey(d: Date) {
   return format(d, 'yyyy-MM')
@@ -151,6 +159,9 @@ function transactionQuery(start: string, end: string) {
   return supabase.from('transactions').select(TXN_SELECT).gte('occurred_on', start).lte('occurred_on', end)
 }
 
+/** Breakdown id for rows whose category was deleted (or never set). */
+export const UNCATEGORISED = 'uncategorised'
+
 export interface TransactionFilters {
   kind?: TxnKind
   categoryId?: string
@@ -180,7 +191,9 @@ export async function listTransactionsPage(
   const { start, end, offset, limit, filters: f, lookup } = args
   let q = transactionQuery(start, end)
   if (f.kind) q = q.eq('kind', f.kind)
-  if (f.categoryId) q = q.eq('category_id', f.categoryId)
+  // `ledger_summary` groups rows without a category under the id 'uncategorised'.
+  if (f.categoryId === UNCATEGORISED) q = q.is('category_id', null)
+  else if (f.categoryId) q = q.eq('category_id', f.categoryId)
   if (f.personId) q = q.or(`user_id.eq.${f.personId},earned_by.eq.${f.personId}`)
 
   const term = f.search?.trim()
@@ -202,6 +215,23 @@ export async function listTransactionsPage(
   const { data, error } = await q
   if (error) fail(error)
   return (data ?? []) as TransactionWithCategory[]
+}
+
+export interface DayGroup {
+  /** `YYYY-MM-DD` */
+  day: string
+  items: LedgerRow[]
+}
+
+/** Consecutive rows sharing `occurred_on` (lists are already newest first). */
+export function groupByDay(items: LedgerRow[]): DayGroup[] {
+  const out: DayGroup[] = []
+  for (const t of items) {
+    const last = out[out.length - 1]
+    if (last && last.day === t.occurred_on) last.items.push(t)
+    else out.push({ day: t.occurred_on, items: [t] })
+  }
+  return out
 }
 
 /**
@@ -282,6 +312,98 @@ export async function deleteBudget(id: string): Promise<void> {
   if (error) fail(error)
 }
 
+// Recurring expenses ----------------------------------------------------------
+//
+// Templates added to a month in bulk by hand. Duplicates are allowed; the
+// `recurring_id` on the inserted transactions only drives the "already added" hint.
+
+export type RecurringExpense = Tables<'recurring_expenses'>
+
+export interface RecurringWithCategory extends RecurringExpense {
+  category: Pick<Category, 'id' | 'name' | 'icon' | 'color'> | null
+}
+
+export interface RecurringInput {
+  category_id: string
+  amount: number
+  day_of_month: number
+  note: string | null
+  payment_method: string
+}
+
+export async function listRecurring(): Promise<RecurringWithCategory[]> {
+  const { data, error } = await supabase
+    .from('recurring_expenses')
+    .select('*, category:expense_categories(id, name, icon, color)')
+    .order('day_of_month')
+    .order('id')
+  if (error) fail(error)
+  return (data ?? []) as RecurringWithCategory[]
+}
+
+export async function createRecurring(input: RecurringInput): Promise<void> {
+  const { error } = await supabase.from('recurring_expenses').insert(input)
+  if (error) fail(error)
+}
+
+export async function updateRecurring(id: string, patch: Partial<RecurringInput & { active: boolean }>): Promise<void> {
+  const { error } = await supabase.from('recurring_expenses').update(patch).eq('id', id)
+  if (error) fail(error)
+}
+
+export async function deleteRecurring(id: string): Promise<void> {
+  const { error } = await supabase.from('recurring_expenses').delete().eq('id', id)
+  if (error) fail(error)
+}
+
+/** 1 → "1st", 22 → "22nd". */
+export function ordinal(n: number) {
+  const rem100 = n % 100
+  if (rem100 >= 11 && rem100 <= 13) return `${n}th`
+  return `${n}${({ 1: 'st', 2: 'nd', 3: 'rd' } as Record<number, string>)[n % 10] ?? 'th'}`
+}
+
+/** `YYYY-MM-DD` for a template's day inside a `YYYY-MM` month. */
+export function recurringDate(key: string, day: number) {
+  const { date } = monthRange(key)
+  return format(new Date(date.getFullYear(), date.getMonth(), day), 'yyyy-MM-dd')
+}
+
+/** recurring id → dates it was already added on within the month. */
+export async function recurringAddedInMonth(key: string): Promise<Map<string, string[]>> {
+  const { start, end } = monthRange(key)
+  const { data, error } = await supabase
+    .from('transactions')
+    .select('recurring_id, occurred_on')
+    .not('recurring_id', 'is', null)
+    .gte('occurred_on', start)
+    .lte('occurred_on', end)
+    .order('occurred_on')
+  if (error) fail(error)
+  const map = new Map<string, string[]>()
+  for (const r of data ?? []) {
+    if (!r.recurring_id) continue
+    map.set(r.recurring_id, [...(map.get(r.recurring_id) ?? []), r.occurred_on])
+  }
+  return map
+}
+
+/** One insert for every chosen template, dated on its day in `key`. */
+export async function addRecurringForMonth(items: RecurringExpense[], key: string): Promise<void> {
+  const rows = items.map((r) => ({
+    kind: 'expense' as const,
+    amount: r.amount,
+    category_id: r.category_id,
+    occurred_on: recurringDate(key, r.day_of_month),
+    note: r.note,
+    payment_method: r.payment_method,
+    recurring_id: r.id,
+  }))
+  if (rows.length === 0) return
+  const { error } = await supabase.from('transactions').insert(rows)
+  if (error) fail(error)
+}
+
 // Aggregates ------------------------------------------------------------------
 //
 // Screens show server-side pages, so totals come from the `ledger_summary`
@@ -321,6 +443,7 @@ export function toMonthSummary(s: LedgerSummaryRpc): MonthSummary {
         color: c.color,
         icon: c.icon,
         total: Number(c.total),
+        count: Number(c.count),
         share: denom > 0 ? Number(c.total) / denom : 0,
       }))
   return { spent, income, net: income - spent, byCategory: rows('expense', spent), incomeByCategory: rows('income', income) }
@@ -378,7 +501,18 @@ export interface CategoryTotal {
   color: string
   icon: string
   total: number
+  /** Transactions behind `total` (ledger breakdowns only). */
+  count?: number
   share: number
+}
+
+/**
+ * A tapped breakdown row as the latest summary has it, so a drill-down header
+ * follows edits; zeroed once its last transaction is moved or deleted.
+ */
+export function liveCategoryRow(tapped: CategoryTotal, kind: TxnKind, summary: MonthSummary): CategoryTotal {
+  const rows = kind === 'income' ? summary.incomeByCategory : summary.byCategory
+  return rows.find((r) => r.id === tapped.id) ?? { ...tapped, total: 0, count: 0, share: 0 }
 }
 
 export function summarise(txns: TransactionWithCategory[]): MonthSummary {
@@ -390,16 +524,18 @@ export function summarise(txns: TransactionWithCategory[]): MonthSummary {
     if (t.kind === 'income') income += amt
     else spent += amt
     const map = maps[t.kind]
-    const key = t.category?.id ?? 'uncategorised'
+    const key = t.category?.id ?? UNCATEGORISED
     const entry = map.get(key) ?? {
       id: key,
       name: t.category?.name ?? 'Uncategorised',
       color: t.category?.color ?? '#94a3b8',
       icon: t.category?.icon ?? 'tag',
       total: 0,
+      count: 0,
       share: 0,
     }
     entry.total += amt
+    entry.count = (entry.count ?? 0) + 1
     map.set(key, entry)
   }
   const rows = (map: Map<string, CategoryTotal>, denom: number) =>

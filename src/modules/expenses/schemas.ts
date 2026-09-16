@@ -41,3 +41,16 @@ export const budgetSchema = z.object({
     .max(99_999_999, 'Amount is too large'),
 })
 export type BudgetFormValues = z.infer<typeof budgetSchema>
+
+export const recurringSchema = z.object({
+  category_id: z.string().min(1, 'Pick a category'),
+  amount: z
+    .number({ error: 'Enter an amount' })
+    .positive('Amount must be greater than 0')
+    .max(99_999_999, 'Amount is too large'),
+  // 27 is the last day every month has.
+  day_of_month: z.number().int().min(1, 'Pick a day').max(27, 'Pick a day up to the 27th'),
+  note: z.string().trim().max(200, 'Keep the note under 200 characters'),
+  payment_method: z.enum(PAYMENT_METHODS),
+})
+export type RecurringFormValues = z.infer<typeof recurringSchema>

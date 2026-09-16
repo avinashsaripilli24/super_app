@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { zodResolver } from '@hookform/resolvers/zod'
-import { Download, Laptop, LogOut, Moon, Share, Sun } from 'lucide-react'
+import { Link } from '@tanstack/react-router'
+import { Download, Laptop, LogOut, Moon, Repeat, Share, Sun } from 'lucide-react'
 import { useForm } from 'react-hook-form'
 import { toast } from 'sonner'
 import { z } from 'zod'
@@ -12,11 +13,14 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Field } from '@/components/ui/field'
 import { Input } from '@/components/ui/input'
+import { MoneyWords } from '@/components/ui/money'
 import { Skeleton } from '@/components/ui/skeleton'
+import { useAsyncData } from '@/hooks/use-async-data'
 import { usePwaInstall } from '@/hooks/use-pwa-install'
 import { formatPhone } from '@/lib/phone'
 import { supabase } from '@/lib/supabase'
 import { cn, errorMessage } from '@/lib/utils'
+import { listRecurring } from '@/modules/expenses/api'
 import { useAuthStore } from '@/store/auth-store'
 
 const profileSchema = z.object({
@@ -47,6 +51,7 @@ export function SettingsPage() {
         onSaved={refreshProfile}
       />
       <PasswordCard />
+      <RecurringCard />
       <SecurityCard />
       <AppearanceCard />
       <InstallCard />
@@ -183,6 +188,48 @@ function PasswordCard() {
             {isSubmitting ? 'Updating…' : 'Update password'}
           </Button>
         </form>
+      </CardContent>
+    </Card>
+  )
+}
+
+function RecurringCard() {
+  const { data, loading } = useAsyncData(
+    async () => (await listRecurring()).filter((r) => r.active),
+    'settings-recurring',
+    'Failed to load recurring expenses',
+  )
+  const count = data?.length ?? 0
+  const total = data?.reduce((sum, r) => sum + Number(r.amount), 0) ?? 0
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Recurring expenses</CardTitle>
+        <CardDescription>
+          Rent, EMIs and bills you pay every month. Add them to a month together in one tap.
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="flex items-center justify-between gap-3">
+        {loading ? (
+          <Skeleton className="h-10 w-40" />
+        ) : (
+          <div className="min-w-0 text-sm">
+            <p className="font-medium">
+              {count === 0 ? 'None set up' : `${count} active`}
+            </p>
+            {count > 0 && (
+              <p className="text-xs text-muted-foreground">
+                <MoneyWords amount={total} label="Recurring every month" align="start" /> every month
+              </p>
+            )}
+          </div>
+        )}
+        <Button asChild variant="outline" size="sm" className="shrink-0">
+          <Link to="/expenses/recurring">
+            <Repeat /> Manage
+          </Link>
+        </Button>
       </CardContent>
     </Card>
   )
