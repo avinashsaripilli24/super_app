@@ -11,6 +11,9 @@ import { useDebouncedValue } from '@/hooks/use-debounced-value'
 import { DEFAULT_PAGE_SIZE, useInfiniteList } from '@/hooks/use-infinite-list'
 import { cn, formatMoney } from '@/lib/utils'
 import {
+  PAYMENT_METHODS,
+  PAYMENT_METHOD_LABEL,
+  UNSPECIFIED_METHOD,
   groupByDay,
   listTransactionsPage,
   monthRange,
@@ -48,6 +51,7 @@ export function TransactionList({
   const [kind, setKind] = useState<'all' | TxnKind>('all')
   const [categoryId, setCategoryId] = useState<string>('all')
   const [personId, setPersonId] = useState<string>('all')
+  const [method, setMethod] = useState<string>('all')
   const debouncedSearch = useDebouncedValue(search.trim(), 300)
 
   const filterCategories = useMemo(
@@ -66,12 +70,19 @@ export function TransactionList({
       kind: kind === 'all' ? undefined : kind,
       categoryId: categoryId === 'all' ? undefined : categoryId,
       personId: personId === 'all' ? undefined : personId,
+      paymentMethod: method === 'all' ? undefined : method,
       search: debouncedSearch || undefined,
     }),
-    [kind, categoryId, personId, debouncedSearch],
+    [kind, categoryId, personId, method, debouncedSearch],
   )
-  const hasFilters = !!(filters.kind || filters.categoryId || filters.personId || filters.search)
-  const key = [month, kind, categoryId, personId, debouncedSearch.toLowerCase()].join('|')
+  const hasFilters = !!(
+    filters.kind ||
+    filters.categoryId ||
+    filters.personId ||
+    filters.paymentMethod ||
+    filters.search
+  )
+  const key = [month, kind, categoryId, personId, method, debouncedSearch.toLowerCase()].join('|')
 
   const list = useInfiniteList<LedgerRow>(
     async (offset, limit, signal) => {
@@ -109,7 +120,7 @@ export function TransactionList({
             onChange={(e) => setSearch(e.target.value)}
           />
         </div>
-        <div className="grid grid-cols-3 gap-2">
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
           <Select value={kind} onValueChange={(v) => changeKind(v as typeof kind)}>
             <SelectTrigger aria-label="Type">
               <SelectValue />
@@ -144,6 +155,20 @@ export function TransactionList({
                   {name}
                 </SelectItem>
               ))}
+            </SelectContent>
+          </Select>
+          <Select value={method} onValueChange={setMethod}>
+            <SelectTrigger aria-label="Paid via">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All methods</SelectItem>
+              {PAYMENT_METHODS.map((m) => (
+                <SelectItem key={m} value={m}>
+                  {PAYMENT_METHOD_LABEL[m]}
+                </SelectItem>
+              ))}
+              <SelectItem value={UNSPECIFIED_METHOD}>Not specified</SelectItem>
             </SelectContent>
           </Select>
         </div>

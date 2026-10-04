@@ -4,9 +4,11 @@
 import { format, parseISO } from 'date-fns'
 
 import {
+  methodMeta,
   summarise,
   summariseByMonth,
   summariseByPerson,
+  type CategoryTotal,
   type LedgerRow,
   type TxnKind,
 } from '@/modules/expenses/api'
@@ -26,14 +28,6 @@ export interface ExportOptions {
 
 const HEADER_FILL = 'FFE2E8F0'
 const MONEY = '#,##0.00'
-
-const METHOD_LABEL: Record<string, string> = {
-  cash: 'Cash',
-  upi: 'UPI',
-  card: 'Card',
-  bank: 'Bank transfer',
-  other: 'Other',
-}
 
 export async function exportLedgerToExcel(opts: ExportOptions): Promise<string> {
   const { Workbook } = await import('exceljs')
@@ -84,7 +78,7 @@ function addLedgerSheet(
       note: r.note ?? '',
       amount: Number(r.amount),
       currency: r.currency,
-      method: METHOD_LABEL[r.payment_method ?? ''] ?? r.payment_method ?? '',
+      method: r.payment_method ? methodMeta(r.payment_method).label : '',
       earned_by: r.earned_by_name ?? r.added_by,
       added_by: r.added_by,
       created_at: new Date(r.created_at),
@@ -120,23 +114,13 @@ function addSummarySheet(wb: InstanceType<typeof import('exceljs').Workbook>, op
   ws.addRow([])
 
   if (opts.kind !== 'income') {
-    section(ws, 'Spending by category', ['Category', 'Amount', 'Share'])
-    for (const c of s.byCategory) {
-      const row = ws.addRow([c.name, c.total, c.share])
-      row.getCell(2).numFmt = MONEY
-      row.getCell(3).numFmt = '0%'
-    }
-    ws.addRow([])
+    breakdown(ws, 'Spending by category', 'Category', s.byCategory)
+    breakdown(ws, 'Spending by payment method', 'Paid via', s.byMethod)
   }
 
   if (opts.kind !== 'expense') {
-    section(ws, 'Income by category', ['Category', 'Amount', 'Share'])
-    for (const c of s.incomeByCategory) {
-      const row = ws.addRow([c.name, c.total, c.share])
-      row.getCell(2).numFmt = MONEY
-      row.getCell(3).numFmt = '0%'
-    }
-    ws.addRow([])
+    breakdown(ws, 'Income by category', 'Category', s.incomeByCategory)
+    breakdown(ws, 'Income by received via', 'Received via', s.incomeByMethod)
   }
 
   section(ws, 'By person', ['Person', 'Spent (added)', 'Income (earned)', 'Rows'])
@@ -156,6 +140,17 @@ function addSummarySheet(wb: InstanceType<typeof import('exceljs').Workbook>, op
       row.getCell(4).numFmt = MONEY
     }
   }
+}
+
+/** Name / Amount / Share / Rows table followed by a blank row. */
+function breakdown(ws: Sheet, heading: string, nameHeader: string, rows: CategoryTotal[]) {
+  section(ws, heading, [nameHeader, 'Amount', 'Share', 'Rows'])
+  for (const c of rows) {
+    const row = ws.addRow([c.name, c.total, c.share, c.count ?? 0])
+    row.getCell(2).numFmt = MONEY
+    row.getCell(3).numFmt = '0%'
+  }
+  ws.addRow([])
 }
 
 function section(ws: Sheet, heading: string, headers: string[]) {

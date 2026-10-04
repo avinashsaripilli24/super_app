@@ -11,6 +11,7 @@ import {
   groupByDay,
   listTransactionsPage,
   withNames,
+  type BreakdownBy,
   type Category,
   type CategoryTotal,
   type LedgerRow,
@@ -23,6 +24,8 @@ import { DayGroups } from '@/modules/expenses/components/transaction-list'
 interface ListProps {
   category: CategoryTotal
   kind: TxnKind
+  /** Whether `category` is a category row or a payment-method row. */
+  by: BreakdownBy
   /** `YYYY-MM-DD`, inclusive */
   start: string
   end: string
@@ -34,8 +37,8 @@ interface ListProps {
 }
 
 /**
- * Every transaction behind one breakdown row for a period, paged from the
- * server. Header figures come from the summary row (the RPC), not the list.
+ * Every transaction behind one breakdown row (a category or a payment method)
+ * for a period, paged from the server. Header figures come from the summary row (the RPC), not the list.
  */
 export function CategoryTransactionsSheet({
   open,
@@ -77,18 +80,31 @@ export function CategoryTransactionsSheet({
             />
           )}
         </SheetHeader>
-        <SheetBody>{open && category && <CategoryTransactionList category={category} {...rest} />}</SheetBody>
+        <SheetBody>
+          {open && category && <CategoryTransactionList key={rest.by} category={category} {...rest} />}
+        </SheetBody>
       </SheetContent>
     </Sheet>
   )
 }
 
-function CategoryTransactionList({ category, kind, start, end, categories, names, onSelect, refreshToken }: ListProps) {
-  const key = [start, end, kind, category.id].join('|')
+function CategoryTransactionList({
+  category,
+  kind,
+  by,
+  start,
+  end,
+  categories,
+  names,
+  onSelect,
+  refreshToken,
+}: ListProps) {
+  const key = [start, end, kind, by, category.id].join('|')
   const list = useInfiniteList<LedgerRow>(
     async (offset, limit, signal) => {
+      const filters = by === 'method' ? { kind, paymentMethod: category.id } : { kind, categoryId: category.id }
       const rows = await listTransactionsPage(
-        { start, end, offset, limit, filters: { kind, categoryId: category.id }, lookup: { categories, names } },
+        { start, end, offset, limit, filters, lookup: { categories, names } },
         signal,
       )
       return withNames(rows, names)
@@ -124,7 +140,13 @@ function CategoryTransactionList({ category, kind, start, end, categories, names
           error={list.error}
           onRetry={list.items.length === 0 ? reload : list.loadMore}
           rows={3}
-          endLabel={list.items.length > DEFAULT_PAGE_SIZE ? 'That’s everything in this category' : undefined}
+          endLabel={
+            list.items.length > DEFAULT_PAGE_SIZE
+              ? by === 'method'
+                ? `That’s everything ${kind === 'income' ? 'received' : 'paid'} via ${category.name}`
+                : 'That’s everything in this category'
+              : undefined
+          }
         />
       )}
     </div>

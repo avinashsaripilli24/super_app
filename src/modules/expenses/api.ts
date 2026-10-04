@@ -41,6 +41,30 @@ export const PAYMENT_METHOD_LABEL: Record<PaymentMethod, string> = {
   other: 'Other',
 }
 
+/** Breakdown / filter key for rows saved without a payment method. */
+export const UNSPECIFIED_METHOD = 'unspecified'
+
+export interface MethodMeta {
+  label: string
+  icon: string
+  color: string
+}
+
+const METHOD_META: Record<PaymentMethod | typeof UNSPECIFIED_METHOD, MethodMeta> = {
+  cash: { label: PAYMENT_METHOD_LABEL.cash, icon: 'banknote', color: '#16a34a' },
+  upi: { label: PAYMENT_METHOD_LABEL.upi, icon: 'smartphone', color: '#7c3aed' },
+  card: { label: PAYMENT_METHOD_LABEL.card, icon: 'credit-card', color: '#2563eb' },
+  bank: { label: PAYMENT_METHOD_LABEL.bank, icon: 'landmark', color: '#0891b2' },
+  other: { label: PAYMENT_METHOD_LABEL.other, icon: 'wallet', color: '#64748b' },
+  unspecified: { label: 'Not specified', icon: 'circle-help', color: '#94a3b8' },
+}
+
+/** Label, icon and colour for a stored method (null → "Not specified"; unknown strings keep their text). */
+export function methodMeta(method: string | null | undefined): MethodMeta {
+  const key = method || UNSPECIFIED_METHOD
+  return METHOD_META[key as keyof typeof METHOD_META] ?? { label: key, icon: 'wallet', color: '#64748b' }
+}
+
 /** `YYYY-MM` for the given date. */
 export function monthKey(d: Date) {
   return format(d, 'yyyy-MM')
@@ -167,6 +191,8 @@ export interface TransactionFilters {
   categoryId?: string
   /** Rows the person added OR earned. */
   personId?: string
+  /** A `payment_method` value, or `UNSPECIFIED_METHOD` for rows without one. */
+  paymentMethod?: string
   /** Free text: matches note, category name or a person's name. */
   search?: string
 }
@@ -195,6 +221,9 @@ export async function listTransactionsPage(
   if (f.categoryId === UNCATEGORISED) q = q.is('category_id', null)
   else if (f.categoryId) q = q.eq('category_id', f.categoryId)
   if (f.personId) q = q.or(`user_id.eq.${f.personId},earned_by.eq.${f.personId}`)
+  // Mirrors `ledger_summary`: null and '' both count as 'unspecified'.
+  if (f.paymentMethod === UNSPECIFIED_METHOD) q = q.or('payment_method.is.null,payment_method.eq.')
+  else if (f.paymentMethod) q = q.eq('payment_method', f.paymentMethod)
 
   const term = f.search?.trim()
   if (term) {
@@ -415,6 +444,8 @@ export interface LedgerSummaryRpc {
   spent: number
   income: number
   by_category: { id: string; name: string; icon: string; color: string; kind: TxnKind; total: number; count: number }[]
+  /** Per payment method; rows without one are under `UNSPECIFIED_METHOD`. */
+  by_method?: { method: string; kind: TxnKind; total: number; count: number }[]
   /** Per creator: everything they spent / recorded as income; `count` = expense rows only. */
   added_by: { id: string; spent: number; income: number; count: number }[]
   /** Per earner (falls back to creator for legacy rows): income only. */
@@ -428,7 +459,21 @@ export async function fetchLedgerSummary(start: string, end: string): Promise<Le
   return data as unknown as LedgerSummaryRpc
 }
 
-export const EMPTY_SUMMARY: MonthSummary = { spent: 0, income: 0, net: 0, byCategory: [], incomeByCategory: [] }
+export const EMPTY_SUMMARY: MonthSummary = {
+  spent: 0,
+  income: 0,
+  net: 0,
+  byCategory: [],
+  incomeByCategory: [],
+  byMethod: [],
+  incomeByMethod: [],
+}
+
+/** A payment-method breakdown row in the same shape as a category row. */
+function methodRow(method: string, total: number, count: number, denom: number): CategoryTotal {
+  const m = methodMeta(method)
+  return { id: method, name: m.label, icon: m.icon, color: m.color, total, count, share: denom > 0 ? total / denom : 0 }
+}
 
 /** RPC → the `MonthSummary` shape the tiles and breakdowns render. */
 export function toMonthSummary(s: LedgerSummaryRpc): MonthSummary {
@@ -446,7 +491,19 @@ export function toMonthSummary(s: LedgerSummaryRpc): MonthSummary {
         count: Number(c.count),
         share: denom > 0 ? Number(c.total) / denom : 0,
       }))
-  return { spent, income, net: income - spent, byCategory: rows('expense', spent), incomeByCategory: rows('income', income) }
+  const methods = (kind: TxnKind, denom: number) =>
+    (s.by_method ?? [])
+      .filter((m) => m.kind === kind)
+      .map((m) => methodRow(m.method, Number(m.total), Number(m.count), denom))
+  return {
+    spent,
+    income,
+    net: income - spent,
+    byCategory: rows('expense', spent),
+    incomeByCategory: rows('income', income),
+    byMethod: methods('expense', spent),
+    incomeByMethod: methods('income', income),
+  }
 }
 
 /** RPC → 12 calendar-month rows for `year`. */
@@ -493,7 +550,14 @@ export interface MonthSummary {
   byCategory: CategoryTotal[]
   /** Income categories, largest first; `share` is of `income`. */
   incomeByCategory: CategoryTotal[]
+  /** Expenses per payment method (`id` = method key), largest first. */
+  byMethod: CategoryTotal[]
+  /** Income per "received via" method, largest first. */
+  incomeByMethod: CategoryTotal[]
 }
+
+/** What a breakdown row groups by. */
+export type BreakdownBy = 'category' | 'method'
 
 export interface CategoryTotal {
   id: string
@@ -510,8 +574,20 @@ export interface CategoryTotal {
  * A tapped breakdown row as the latest summary has it, so a drill-down header
  * follows edits; zeroed once its last transaction is moved or deleted.
  */
-export function liveCategoryRow(tapped: CategoryTotal, kind: TxnKind, summary: MonthSummary): CategoryTotal {
-  const rows = kind === 'income' ? summary.incomeByCategory : summary.byCategory
+export function liveCategoryRow(
+  tapped: CategoryTotal,
+  kind: TxnKind,
+  summary: MonthSummary,
+  by: BreakdownBy = 'category',
+): CategoryTotal {
+  const rows =
+    by === 'method'
+      ? kind === 'income'
+        ? summary.incomeByMethod
+        : summary.byMethod
+      : kind === 'income'
+        ? summary.incomeByCategory
+        : summary.byCategory
   return rows.find((r) => r.id === tapped.id) ?? { ...tapped, total: 0, count: 0, share: 0 }
 }
 
@@ -519,10 +595,19 @@ export function summarise(txns: TransactionWithCategory[]): MonthSummary {
   let spent = 0
   let income = 0
   const maps: Record<TxnKind, Map<string, CategoryTotal>> = { expense: new Map(), income: new Map() }
+  const methodMaps: Record<TxnKind, Map<string, { total: number; count: number }>> = {
+    expense: new Map(),
+    income: new Map(),
+  }
   for (const t of txns) {
     const amt = Number(t.amount)
     if (t.kind === 'income') income += amt
     else spent += amt
+    const method = t.payment_method || UNSPECIFIED_METHOD
+    const m = methodMaps[t.kind].get(method) ?? { total: 0, count: 0 }
+    m.total += amt
+    m.count += 1
+    methodMaps[t.kind].set(method, m)
     const map = maps[t.kind]
     const key = t.category?.id ?? UNCATEGORISED
     const entry = map.get(key) ?? {
@@ -540,12 +625,16 @@ export function summarise(txns: TransactionWithCategory[]): MonthSummary {
   }
   const rows = (map: Map<string, CategoryTotal>, denom: number) =>
     [...map.values()].sort((a, b) => b.total - a.total).map((c) => ({ ...c, share: denom > 0 ? c.total / denom : 0 }))
+  const methods = (map: Map<string, { total: number; count: number }>, denom: number) =>
+    [...map].map(([method, m]) => methodRow(method, m.total, m.count, denom)).sort((a, b) => b.total - a.total)
   return {
     spent,
     income,
     net: income - spent,
     byCategory: rows(maps.expense, spent),
     incomeByCategory: rows(maps.income, income),
+    byMethod: methods(methodMaps.expense, spent),
+    incomeByMethod: methods(methodMaps.income, income),
   }
 }
 

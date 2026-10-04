@@ -16,11 +16,14 @@ export function CategoryBreakdown({
   rows,
   emptyText = 'No spending recorded this month.',
   limit = 6,
+  noun = 'categories',
   onSelect,
 }: {
   rows: CategoryTotal[]
   emptyText?: string
   limit?: number
+  /** Plural used by the "Show all" toggle. */
+  noun?: string
   onSelect?: (row: CategoryTotal) => void
 }) {
   const [showAll, setShowAll] = useState(false)
@@ -72,7 +75,7 @@ export function CategoryBreakdown({
       </ul>
       {rows.length > limit && (
         <Button variant="ghost" size="sm" className="w-full" onClick={() => setShowAll((v) => !v)}>
-          {showAll ? 'Show less' : `Show all ${rows.length} categories`}
+          {showAll ? 'Show less' : `Show all ${rows.length} ${noun}`}
         </Button>
       )}
     </div>

@@ -11,6 +11,7 @@ import {
   Car,
   ChartCandlestick,
   ChartLine,
+  CircleHelp,
   Clapperboard,
   Coffee,
   Coins,
@@ -126,6 +127,8 @@ export const CATEGORY_ICONS: Record<string, LucideIcon> = {
   users: Users,
   ticket: Ticket,
   bus: Bus,
+  // payment-method breakdown ("Not specified")
+  'circle-help': CircleHelp,
 }
 
 export const CATEGORY_ICON_NAMES = Object.keys(CATEGORY_ICONS)

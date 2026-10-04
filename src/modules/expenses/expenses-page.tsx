@@ -24,11 +24,12 @@ import {
   monthKey,
   monthRange,
   toMonthSummary,
+  type BreakdownBy,
   type CategoryTotal,
   type LedgerRow,
   type TxnKind,
 } from '@/modules/expenses/api'
-import { CategoryBreakdown } from '@/modules/expenses/components/category-breakdown'
+import { BreakdownCard } from '@/modules/expenses/components/breakdown-card'
 import { CategoryTransactionsSheet } from '@/modules/expenses/components/category-transactions-sheet'
 import { ExportSheet } from '@/modules/expenses/components/export-sheet'
 import { MonthSwitcher } from '@/modules/expenses/components/month-switcher'
@@ -79,10 +80,10 @@ export function ExpensesPage() {
   const [confirmDelete, setConfirmDelete] = useState<LedgerRow | null>(null)
   const [deleting, setDeleting] = useState(false)
   // Breakdown row whose transactions are open (kept through the close animation).
-  const [drill, setDrill] = useState<{ row: CategoryTotal; kind: TxnKind } | null>(null)
+  const [drill, setDrill] = useState<{ row: CategoryTotal; kind: TxnKind; by: BreakdownBy } | null>(null)
   const [drillOpen, setDrillOpen] = useState(false)
-  const openCategory = (kind: TxnKind) => (row: CategoryTotal) => {
-    setDrill({ row, kind })
+  const openBreakdown = (kind: TxnKind) => (row: CategoryTotal, by: BreakdownBy) => {
+    setDrill({ row, kind, by })
     setDrillOpen(true)
   }
   const overallBudget = budgets.find((b) => b.category_id === null)
@@ -210,49 +211,29 @@ export function ExpensesPage() {
         </CardContent>
       </Card>
 
-      {/* Breakdown */}
-      <Card>
-        <CardHeader className="flex-row items-center justify-between gap-2 space-y-0">
-          <CardTitle className="text-sm">Spending by category</CardTitle>
+      {/* Breakdowns: by category or payment method */}
+      <BreakdownCard
+        kind="expense"
+        summary={summary}
+        loading={loading}
+        emptyText="No spending recorded this month."
+        onSelect={openBreakdown('expense')}
+        action={
           <Button asChild variant="ghost" size="sm">
             <Link to="/expenses/categories">
               <Settings2 /> Categories
             </Link>
           </Button>
-        </CardHeader>
-        <CardContent>
-          {loading ? (
-            <div className="space-y-2">
-              <Skeleton className="h-3 w-full" />
-              <Skeleton className="h-8 w-full" />
-              <Skeleton className="h-8 w-full" />
-            </div>
-          ) : (
-            <CategoryBreakdown rows={summary.byCategory} onSelect={openCategory('expense')} />
-          )}
-        </CardContent>
-      </Card>
+        }
+      />
 
-      {/* Income */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-sm">Income by category</CardTitle>
-        </CardHeader>
-        <CardContent>
-          {loading ? (
-            <div className="space-y-2">
-              <Skeleton className="h-3 w-full" />
-              <Skeleton className="h-8 w-full" />
-            </div>
-          ) : (
-            <CategoryBreakdown
-              rows={summary.incomeByCategory}
-              emptyText="No income recorded this month."
-              onSelect={openCategory('income')}
-            />
-          )}
-        </CardContent>
-      </Card>
+      <BreakdownCard
+        kind="income"
+        summary={summary}
+        loading={loading}
+        emptyText="No income recorded this month."
+        onSelect={openBreakdown('income')}
+      />
 
       {/* Transactions */}
       <section className="space-y-2">
@@ -283,8 +264,9 @@ export function ExpensesPage() {
       <CategoryTransactionsSheet
         open={drillOpen}
         onOpenChange={setDrillOpen}
-        category={drill && liveCategoryRow(drill.row, drill.kind, summary)}
+        category={drill && liveCategoryRow(drill.row, drill.kind, summary, drill.by)}
         kind={drill?.kind ?? 'expense'}
+        by={drill?.by ?? 'category'}
         start={range.start}
         end={range.end}
         periodLabel={format(range.date, 'MMMM yyyy')}

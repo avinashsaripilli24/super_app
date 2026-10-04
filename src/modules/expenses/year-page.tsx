@@ -25,12 +25,13 @@ import {
   toMonthTotals,
   toPersonTotals,
   yearRange,
+  type BreakdownBy,
   type CategoryTotal,
   type LedgerRow,
   type MonthTotals,
   type TxnKind,
 } from '@/modules/expenses/api'
-import { CategoryBreakdown } from '@/modules/expenses/components/category-breakdown'
+import { BreakdownCard } from '@/modules/expenses/components/breakdown-card'
 import { CategoryTransactionsSheet } from '@/modules/expenses/components/category-transactions-sheet'
 import { ExportSheet } from '@/modules/expenses/components/export-sheet'
 import { MonthlyBars } from '@/modules/expenses/components/monthly-bars'
@@ -41,7 +42,7 @@ import { YearSwitcher } from '@/modules/expenses/components/year-switcher'
 import { useAuthStore } from '@/store/auth-store'
 
 const EMPTY_NAMES = new Map<string, string>()
-const EMPTY_RPC = { spent: 0, income: 0, by_category: [], added_by: [], earned_by: [], by_month: [] }
+const EMPTY_RPC = { spent: 0, income: 0, by_category: [], by_method: [], added_by: [], earned_by: [], by_month: [] }
 
 export function YearPage() {
   const search = useSearch({ from: '/_authed/expenses/year' })
@@ -67,10 +68,10 @@ export function YearPage() {
   const summary = useMemo(() => (data ? toMonthSummary(data.rpc) : EMPTY_SUMMARY), [data])
 
   // Category drill-down: its transactions in a sheet, each opening the edit sheet.
-  const [drill, setDrill] = useState<{ row: CategoryTotal; kind: TxnKind } | null>(null)
+  const [drill, setDrill] = useState<{ row: CategoryTotal; kind: TxnKind; by: BreakdownBy } | null>(null)
   const [drillOpen, setDrillOpen] = useState(false)
-  const openCategory = (kind: TxnKind) => (row: CategoryTotal) => {
-    setDrill({ row, kind })
+  const openBreakdown = (kind: TxnKind) => (row: CategoryTotal, by: BreakdownBy) => {
+    setDrill({ row, kind, by })
     setDrillOpen(true)
   }
   const [listToken, bumpList] = useReducer((n: number) => n + 1, 0)
@@ -214,46 +215,21 @@ export function YearPage() {
         </CardContent>
       </Card>
 
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-sm">Spending by category</CardTitle>
-        </CardHeader>
-        <CardContent>
-          {loading ? (
-            <div className="space-y-2">
-              <Skeleton className="h-3 w-full" />
-              <Skeleton className="h-8 w-full" />
-              <Skeleton className="h-8 w-full" />
-            </div>
-          ) : (
-            <CategoryBreakdown
-              rows={summary.byCategory}
-              emptyText="No spending recorded this year."
-              onSelect={openCategory('expense')}
-            />
-          )}
-        </CardContent>
-      </Card>
+      <BreakdownCard
+        kind="expense"
+        summary={summary}
+        loading={loading}
+        emptyText="No spending recorded this year."
+        onSelect={openBreakdown('expense')}
+      />
 
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-sm">Income by category</CardTitle>
-        </CardHeader>
-        <CardContent>
-          {loading ? (
-            <div className="space-y-2">
-              <Skeleton className="h-3 w-full" />
-              <Skeleton className="h-8 w-full" />
-            </div>
-          ) : (
-            <CategoryBreakdown
-              rows={summary.incomeByCategory}
-              emptyText="No income recorded this year."
-              onSelect={openCategory('income')}
-            />
-          )}
-        </CardContent>
-      </Card>
+      <BreakdownCard
+        kind="income"
+        summary={summary}
+        loading={loading}
+        emptyText="No income recorded this year."
+        onSelect={openBreakdown('income')}
+      />
 
       <Card>
         <CardHeader>
@@ -358,8 +334,9 @@ export function YearPage() {
       <CategoryTransactionsSheet
         open={drillOpen}
         onOpenChange={setDrillOpen}
-        category={drill && liveCategoryRow(drill.row, drill.kind, summary)}
+        category={drill && liveCategoryRow(drill.row, drill.kind, summary, drill.by)}
         kind={drill?.kind ?? 'expense'}
+        by={drill?.by ?? 'category'}
         start={range.start}
         end={range.end}
         periodLabel={String(year)}
