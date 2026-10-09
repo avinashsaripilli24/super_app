@@ -391,6 +391,11 @@ deno_version = 2
 [functions.admin-users]
 verify_jwt = false
 
+# Called by the database with a shared secret (x-notify-secret), or by a
+# signed-in user for a test push; both are checked in code.
+[functions.notify]
+verify_jwt = false
+
 # Logflare/Vector are heavy locally and not needed here.
 [analytics]
 enabled = false

@@ -82,9 +82,13 @@ const dashboardRoute = createRoute({
 const expensesRoute = createRoute({
   getParentRoute: () => authedRoute,
   path: '/expenses',
-  validateSearch: (search: Record<string, unknown>): { month?: string } => {
+  // add=1 (from a reminder notification) opens the Add transaction sheet.
+  validateSearch: (search: Record<string, unknown>): { month?: string; add?: 1 } => {
     const m = search.month
-    return typeof m === 'string' && /^\d{4}-\d{2}$/.test(m) ? { month: m } : {}
+    return {
+      ...(typeof m === 'string' && /^\d{4}-\d{2}$/.test(m) ? { month: m } : {}),
+      ...(search.add === 1 || search.add === '1' ? { add: 1 as const } : {}),
+    }
   },
   component: ExpensesPage,
 })

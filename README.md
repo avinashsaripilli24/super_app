@@ -101,14 +101,58 @@ npx supabase login
 npx supabase link --project-ref <ref>
 npx supabase db push --include-seed
 npx supabase functions deploy admin-users
+npx supabase functions deploy notify
 ```
 
 `--include-seed` creates the default admin (9999999999 / Admin@1234) on the hosted project; the seed holds nothing else. Sign in on the live site straight away and change both the number and the password, since both are public in this repo. Re-running the seed never resets them.
+
+## Notifications
+
+Android Chrome gets Web Push reminders ("Have you updated all your expenses?") at **1 pm and 10 pm IST**, budget alerts at 80% / 100%, and recurring expenses on their day. Each person turns them on per device in **Settings → Notifications** (or from the Dashboard banner), where they can also send test notifications to that phone. Push needs https or `localhost`, so it can't be tried over `dev:lan`.
+
+How it runs: `pg_cron` (UTC) and a trigger on `transactions` call `public.notify_dispatch()`, which POSTs through `pg_net` to the `notify` edge function, which sends to every row in `push_subscriptions`. The function URL and a shared secret live in **Supabase Vault**, never in the repo; until they are set, dispatch logs and does nothing.
+
+**One-time setup per environment.**
+
+1. Generate a VAPID key pair and a random secret (keep the private key secret):
+
+   ```powershell
+   npx web-push generate-vapid-keys
+   node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
+   ```
+
+2. Edge function secrets. Locally, `supabase/functions/.env` (gitignored, read by `npm run fn:serve`):
+
+   ```
+   NOTIFY_SECRET=<random hex>
+   VAPID_PUBLIC_KEY=<public key>
+   VAPID_PRIVATE_KEY=<private key>
+   VAPID_SUBJECT=mailto:<an address you own>
+   ```
+
+   Hosted: `npx supabase secrets set NOTIFY_SECRET=… VAPID_PUBLIC_KEY=… VAPID_PRIVATE_KEY=… VAPID_SUBJECT=mailto:…`
+
+3. The app's copy of the public key: `VITE_VAPID_PUBLIC_KEY=<public key>` in `.env` locally, and as a repository **Variable** of the same name for the Pages build. Without it the Settings card says notifications aren't set up.
+
+4. Vault, in the SQL editor (Studio locally). Use the same secret as `NOTIFY_SECRET`:
+
+   ```sql
+   -- Hosted
+   select vault.create_secret('https://<ref>.supabase.co/functions/v1/notify', 'notify_url');
+   -- Local (the database reaches the function through the Docker network)
+   select vault.create_secret('http://supabase_kong_super_app:8000/functions/v1/notify', 'notify_url');
+
+   select vault.create_secret('<random hex>', 'notify_secret');
+   ```
+
+   `npm run db:reset` wipes the vault, so repeat this locally after a reset. To change a value: `select vault.update_secret((select id from vault.secrets where name = 'notify_url'), '<new value>');`
+
+Check it: `select public.notify_dispatch('daily');` sends the reminder now; `select * from net._http_response order by id desc limit 5;` shows the function's replies, and `select * from cron.job_run_details order by start_time desc limit 5;` the scheduled runs. Rotating the VAPID keys invalidates every subscription: people turn notifications off and on again.
 
 ## Hosting on GitHub Pages
 
 `.github/workflows/deploy-pages.yml` builds and publishes the app to https://avinashsaripilli24.github.io/super_app/ on every push to `main` (or run it by hand from the Actions tab). The build sets `BASE_PATH=/super_app/`, which becomes Vite's `base`, the router's `basepath` and the PWA scope, and copies `index.html` to `404.html` so deep links survive a reload. One-time setup in the repo's **Settings**:
 
 1. **Pages** → Build and deployment → Source: **GitHub Actions**.
-2. **Secrets and variables → Actions → Variables**: add `VITE_SUPABASE_URL` (`https://<ref>.supabase.co`) and `VITE_SUPABASE_ANON_KEY` from the hosted project (Project Settings → API). The workflow refuses to build without them.
+2. **Secrets and variables → Actions → Variables**: add `VITE_SUPABASE_URL` (`https://<ref>.supabase.co`) and `VITE_SUPABASE_ANON_KEY` from the hosted project (Project Settings → API). The workflow refuses to build without them. Add `VITE_VAPID_PUBLIC_KEY` too for notifications (see [Notifications](#notifications)).
 3. In the hosted Supabase project, **Authentication → URL Configuration**: set the Site URL to `https://avinashsaripilli24.github.io/super_app/`.

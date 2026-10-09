@@ -34,6 +34,11 @@ export default defineConfig({
     react(),
     tailwindcss(),
     VitePWA({
+      // Custom service worker (src/sw.ts) so it can show push notifications;
+      // it precaches the same files the generated one did.
+      strategies: 'injectManifest',
+      srcDir: 'src',
+      filename: 'sw.ts',
       registerType: 'autoUpdate',
       includeAssets: ['favicon.svg', 'apple-touch-icon.png'],
       manifest: {
@@ -57,22 +62,13 @@ export default defineConfig({
           },
         ],
       },
-      workbox: {
+      injectManifest: {
         globPatterns: ['**/*.{js,css,html,ico,png,svg,woff2}'],
-        navigateFallback: 'index.html',
-        // Never serve the app shell for backend paths (matters if Supabase is
-        // ever proxied on the same origin). No runtime caching of Supabase
-        // REST in v1: per-user data must always be fresh.
-        navigateFallbackDenylist: [
-          /^\/functions\//,
-          /^\/auth\//,
-          /^\/rest\//,
-          /^\/storage\//,
-          /^\/realtime\//,
-        ],
       },
       devOptions: {
         enabled: true,
+        type: 'module',
+        navigateFallback: 'index.html',
       },
     }),
   ],

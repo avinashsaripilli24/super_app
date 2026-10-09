@@ -108,6 +108,27 @@ export type Database = {
           },
         ]
       }
+      budget_alerts_sent: {
+        Row: {
+          category_key: string
+          month: string
+          sent_at: string
+          threshold: number
+        }
+        Insert: {
+          category_key: string
+          month: string
+          sent_at?: string
+          threshold: number
+        }
+        Update: {
+          category_key?: string
+          month?: string
+          sent_at?: string
+          threshold?: number
+        }
+        Relationships: []
+      }
       budgets: {
         Row: {
           amount: number
@@ -376,6 +397,54 @@ export type Database = {
         }
         Relationships: []
       }
+      push_subscriptions: {
+        Row: {
+          auth_secret: string
+          created_at: string
+          endpoint: string
+          id: string
+          last_used_at: string | null
+          p256dh: string
+          user_agent: string | null
+          user_id: string
+        }
+        Insert: {
+          auth_secret: string
+          created_at?: string
+          endpoint: string
+          id?: string
+          last_used_at?: string | null
+          p256dh: string
+          user_agent?: string | null
+          user_id: string
+        }
+        Update: {
+          auth_secret?: string
+          created_at?: string
+          endpoint?: string
+          id?: string
+          last_used_at?: string | null
+          p256dh?: string
+          user_agent?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "push_subscriptions_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "push_subscriptions_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "user_names"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       recurring_expenses: {
         Row: {
           active: boolean
@@ -581,6 +650,19 @@ export type Database = {
         Returns: Json
       }
       networth_history: { Args: { p_year: number }; Returns: Json }
+      notify_dispatch: {
+        Args: { p_kind: string; p_payload?: Json }
+        Returns: boolean
+      }
+      register_push_subscription: {
+        Args: {
+          p_auth_secret: string
+          p_endpoint: string
+          p_p256dh: string
+          p_user_agent?: string
+        }
+        Returns: undefined
+      }
     }
     Enums: {
       app_role: "admin" | "user"

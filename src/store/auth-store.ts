@@ -3,6 +3,7 @@ import { create } from 'zustand'
 
 import type { Tables } from '@/lib/database.types'
 import { phoneToAuthEmail } from '@/lib/phone'
+import { disablePush } from '@/lib/push'
 import { supabase } from '@/lib/supabase'
 
 export type Profile = Tables<'profiles'>
@@ -89,6 +90,8 @@ export const useAuthStore = create<AuthState>((set, get) => {
     },
 
     signOut: async () => {
+      // Stop this device's notifications while the session can still delete its row.
+      await disablePush().catch(() => {})
       await supabase.auth.signOut()
       set({ status: 'signedOut', session: null, profile: null })
     },

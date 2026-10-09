@@ -1,4 +1,4 @@
-import { useMemo, useReducer, useState } from 'react'
+import { useEffect, useMemo, useReducer, useState } from 'react'
 import { Link, useNavigate, useSearch } from '@tanstack/react-router'
 import { format } from 'date-fns'
 import { Download, Plus, Repeat, Settings2, Target } from 'lucide-react'
@@ -11,6 +11,7 @@ import { ListSkeleton } from '@/components/ui/list-skeleton'
 import { MoneyWords } from '@/components/ui/money'
 import { Skeleton } from '@/components/ui/skeleton'
 import { useAsyncData } from '@/hooks/use-async-data'
+import { locksEnabled } from '@/lib/app-lock'
 import { cn, errorMessage, formatMoney } from '@/lib/utils'
 import {
   EMPTY_SUMMARY,
@@ -38,6 +39,7 @@ import { StatTile } from '@/modules/expenses/components/stat-tile'
 import { TransactionList } from '@/modules/expenses/components/transaction-list'
 import { TransactionSheet } from '@/modules/expenses/components/transaction-sheet'
 import { ViewToggle } from '@/modules/expenses/components/view-toggle'
+import { useAppLock } from '@/store/app-lock-store'
 import { useAuthStore } from '@/store/auth-store'
 
 const EMPTY_NAMES = new Map<string, string>()
@@ -97,6 +99,19 @@ export function ExpensesPage() {
     setEditing(null)
     setSheetOpen(true)
   }
+
+  // ?add=1 (a reminder notification): open the Add sheet, but only once the
+  // app lock is gone, or the sheet would take focus from the PIN field. The
+  // param is dropped first so a reload doesn't reopen it.
+  const appUnlocked = useAppLock((s) => s.appUnlocked)
+  const linkAdd = search.add === 1 && (!locksEnabled || appUnlocked)
+  useEffect(() => {
+    if (!linkAdd) return
+    void navigate({ to: '/expenses', search: (prev) => ({ ...prev, add: undefined }), replace: true }).then(() => {
+      setEditing(null)
+      setSheetOpen(true)
+    })
+  }, [linkAdd, navigate])
   const openRow = (t: LedgerRow) => {
     setEditing(t)
     setSheetOpen(true)

@@ -29,11 +29,19 @@ $svgSource = Get-Content -Path $svgPath -Raw
 $markHeight = 46.52
 
 function New-Icon {
-  param([int]$Size, [string]$Path, [bool]$Maskable)
+  param([int]$Size, [string]$Path, [bool]$Maskable, [bool]$Badge = $false)
 
   $svg = $svgSource
+  $background = '#fff'
 
-  if ($Maskable) {
+  if ($Badge) {
+    # Android notification badge: drawn as a silhouette from the alpha channel
+    # only, so the mark is solid white on a transparent tile.
+    $scale = 0.96
+    $svg = $svg -replace '<rect width="64" height="64" rx="14" fill="#ffffff"/>', ''
+    $svg = $svg -replace 'fill="url\(#[bsa]\)"', 'fill="#ffffff"'
+    $background = 'transparent'
+  } elseif ($Maskable) {
     # Maskable icons must fill the canvas (no rounded corners -- the platform
     # applies its own) and keep the mark inside the inner 80%.
     $scale = 0.76
@@ -49,7 +57,7 @@ function New-Icon {
 
   $html = @"
 <!doctype html><html><head><meta charset="utf-8"><style>
-html,body{margin:0;padding:0;background:#fff}svg{display:block;width:${Size}px;height:${Size}px}
+html,body{margin:0;padding:0;background:$background}svg{display:block;width:${Size}px;height:${Size}px}
 </style></head><body>
 $svg
 </body></html>
@@ -65,6 +73,7 @@ $svg
     '--disable-gpu',
     '--hide-scrollbars',
     '--force-device-scale-factor=1',
+    '--default-background-color=00000000',
     "--user-data-dir=$tmp\profile",
     "--window-size=$Size,$Size",
     "--screenshot=$Path",
@@ -81,3 +90,4 @@ New-Icon -Size 192 -Path (Join-Path $iconsDir 'pwa-192.png') -Maskable $false
 New-Icon -Size 512 -Path (Join-Path $iconsDir 'pwa-512.png') -Maskable $false
 New-Icon -Size 512 -Path (Join-Path $iconsDir 'pwa-512-maskable.png') -Maskable $true
 New-Icon -Size 180 -Path (Join-Path $root 'public\apple-touch-icon.png') -Maskable $true
+New-Icon -Size 96 -Path (Join-Path $iconsDir 'badge-96.png') -Maskable $false -Badge $true

@@ -7,6 +7,7 @@ import { toast } from 'sonner'
 import { z } from 'zod'
 
 import { SecurityCard } from '@/components/app-lock/security-card'
+import { NotificationsCard } from '@/components/notifications-card'
 import { useTheme, type Theme } from '@/components/theme-provider'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -53,6 +54,7 @@ export function SettingsPage() {
       <PasswordCard />
       <RecurringCard />
       <SecurityCard />
+      <NotificationsCard />
       <AppearanceCard />
       <InstallCard />
       <Card>
