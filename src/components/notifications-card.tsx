@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { Bell, BellRing, Repeat, Smartphone, Target } from 'lucide-react'
 import { toast } from 'sonner'
 
+import { PushProgress } from '@/components/push-progress'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -10,10 +11,12 @@ import {
   disablePush,
   enablePush,
   isPushEnabled,
+  onPushChange,
   pushPermission,
   pushUnsupportedReason,
   sendTestPush,
   showLocalTest,
+  type EnableStep,
   type TestSample,
 } from '@/lib/push'
 import { errorMessage } from '@/lib/utils'
@@ -34,23 +37,31 @@ export function NotificationsCard() {
   const [enabled, setEnabled] = useState<boolean | null>(null)
   const [blocked, setBlocked] = useState(() => !unsupported && pushPermission() === 'denied')
   const [busy, setBusy] = useState<Busy>(null)
+  // Set while turning on: drives the progress shimmer under the switch.
+  const [step, setStep] = useState<EnableStep | null>(null)
 
   useEffect(() => {
     if (unsupported || !userId) return
     let live = true
-    isPushEnabled()
-      .then((on) => live && setEnabled(on))
-      .catch(() => live && setEnabled(false))
+    const load = () =>
+      isPushEnabled()
+        .then((on) => live && setEnabled(on))
+        .catch(() => live && setEnabled(false))
+    void load()
+    // Also turned on/off from the prompt sheet.
+    const off = onPushChange(() => void load())
     return () => {
       live = false
+      off()
     }
   }, [unsupported, userId])
 
   const toggle = async (on: boolean) => {
     setBusy('toggle')
+    if (on) setStep('permission')
     try {
       if (on) {
-        await enablePush()
+        await enablePush(setStep)
         setEnabled(true)
         toast.success('Notifications turned on')
       } else {
@@ -63,6 +74,7 @@ export function NotificationsCard() {
       toast.error(errorMessage(err))
     } finally {
       setBusy(null)
+      setStep(null)
     }
   }
 
@@ -113,11 +125,14 @@ export function NotificationsCard() {
               </label>
               <Switch
                 id="push-switch"
-                checked={enabled}
+                // Flips at once; the progress below shows the setup still running.
+                checked={enabled || step !== null}
                 disabled={busy !== null || (blocked && !enabled)}
                 onCheckedChange={(on) => void toggle(on)}
               />
             </div>
+
+            {step && <PushProgress step={step} />}
 
             {blocked && !enabled && (
               <p className="rounded-lg bg-muted p-3 text-xs text-muted-foreground">

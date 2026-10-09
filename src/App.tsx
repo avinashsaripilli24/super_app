@@ -2,6 +2,7 @@ import { useEffect } from 'react'
 import { RouterProvider } from '@tanstack/react-router'
 
 import { AppLockOverlay } from '@/components/app-lock/app-lock-overlay'
+import { PushPromptSheet } from '@/components/push-prompt'
 import { PwaUpdateToast } from '@/components/pwa-update-toast'
 import { ThemedToaster } from '@/components/themed-toaster'
 import { SplashScreen } from '@/components/splash-screen'
@@ -50,6 +51,7 @@ function App() {
     <>
       {status === 'loading' ? <SplashScreen /> : <RouterProvider router={router} />}
       {status === 'signedIn' && locksEnabled && <AppLockOverlay />}
+      {status === 'signedIn' && <PushPromptSheet />}
       <PwaUpdateToast />
       <ThemedToaster />
     </>

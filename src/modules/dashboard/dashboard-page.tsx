@@ -2,7 +2,6 @@ import { Link } from '@tanstack/react-router'
 import { format } from 'date-fns'
 import { ArrowRight, Landmark, LockKeyhole, TrendingDown, TrendingUp, Wallet } from 'lucide-react'
 
-import { PushPrompt } from '@/components/push-prompt'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { MoneyWords } from '@/components/ui/money'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -65,7 +64,6 @@ export function DashboardPage() {
         <h2 className="text-2xl font-semibold tracking-tight">{firstName ?? 'there'} 👋</h2>
       </div>
 
-      <PushPrompt />
       <RecurringReminder onAdded={reload} />
 
       {/* This month */}
